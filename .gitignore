@@ -1,17 +1,30 @@
+# Python cache
 __pycache__/ 
 *.pyc 
+
+# Database files
 *.db 
 *.sqlite 
 *.sqlite3 
+
+# Instance folder
 instance/ 
+!instance/.gitkeep 
+
+# Uploaded files (keep folder structure only)
 uploads/staff_images/* 
 uploads/staff_signatures/* 
 uploads/staff_signatures_clean/* 
 !uploads/staff_images/.gitkeep 
 !uploads/staff_signatures/.gitkeep 
 !uploads/staff_signatures_clean/.gitkeep 
-!instance/.gitkeep 
+
+# Temporary files
 temp/ 
+
+# Environment variables (IMPORTANT: keep credentials secure)
 .env 
+
+# IDE files
 .vscode/ 
-.idea/ 
+.idea/

@@ -7,7 +7,7 @@ import pandas as pd
 from PIL import Image, ImageEnhance
 from werkzeug.utils import secure_filename
 from flask import current_app
-import hashlib
+from werkzeug.security import generate_password_hash, check_password_hash
 
 def clean_filename(name):
     """Clean filename for saving"""
@@ -207,10 +207,11 @@ def process_imported_staff(df, admin_name):
     
     # Save import log
     log = ImportLog(
+        filename=f"import_{admin_name}_{pd.Timestamp.now()}",
         records_imported=successful,
         records_failed=failed,
         imported_by=admin_name,
-        error_log='\n'.join(errors[:20])
+        error_log='\n'.join(errors[:20]) if errors else None
     )
     db.session.add(log)
     db.session.commit()
@@ -218,28 +219,41 @@ def process_imported_staff(df, admin_name):
     return successful, failed, errors
 
 def init_db():
-    """Initialize database with default admin"""
+    """Initialize database with default admin users for PostgreSQL"""
     from models import db, Admin
     
-    if Admin.query.count() == 0:
-        # Create super admin
-        super_admin = Admin(
-            username='superadmin',
-            email='superadmin@system.com',
-            full_name='Super Administrator',
-            role='super_admin'
-        )
-        super_admin.set_password('superadmin123')
-        db.session.add(super_admin)
-        
-        # Create regular admin
-        admin = Admin(
-            username='admin',
-            email='admin@system.com',
-            full_name='System Administrator',
-            role='admin'
-        )
-        admin.set_password('admin123')
-        db.session.add(admin)
-        
-        db.session.commit()
+    try:
+        # Check if any admin exists
+        if Admin.query.count() == 0:
+            print("📝 Creating default admin users...")
+            
+            # Create super admin
+            super_admin = Admin(
+                username='superadmin',
+                email='superadmin@system.com',
+                full_name='Super Administrator',
+                role='super_admin'
+            )
+            super_admin.set_password('superadmin123')
+            db.session.add(super_admin)
+            
+            # Create regular admin
+            admin = Admin(
+                username='admin',
+                email='admin@system.com',
+                full_name='System Administrator',
+                role='admin'
+            )
+            admin.set_password('admin123')
+            db.session.add(admin)
+            
+            db.session.commit()
+            print("✅ Default admin users created successfully!")
+            print("   - Username: superadmin | Password: superadmin123")
+            print("   - Username: admin | Password: admin123")
+        else:
+            print("✅ Admin users already exist")
+            
+    except Exception as e:
+        print(f"❌ Error creating admin users: {e}")
+        db.session.rollback()
