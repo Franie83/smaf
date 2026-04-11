@@ -1111,8 +1111,17 @@ def staff_dashboard():
 
 # ==================== RUN APP ====================
 
+# ==================== RUN APP ====================
+
 if __name__ == '__main__':
+    # Initialize database and create tables
     with app.app_context():
         db.create_all()
         init_db()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    
+    # Get port from environment variable (Render sets this to 10000)
+    port = int(os.environ.get('PORT', 5000))
+    
+    # Bind to all network interfaces (required for Render)
+    # Set debug=False for production
+    app.run(debug=False, host='0.0.0.0', port=port)
