@@ -6,9 +6,20 @@ load_dotenv()
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     
-    # PostgreSQL Database URI (Neon)
-    # You can also use environment variable: DATABASE_URL
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'postgresql://neondb_owner:npg_jdJ2nNyM8mXs@ep-super-heart-abaksv5y-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require'
+    # Database configuration - supports both Render and local deployment
+    # Priority: Render's DATABASE_URL > Neon DATABASE_URL > SQLite fallback
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    NEON_DATABASE_URL = os.environ.get('NEON_DATABASE_URL') or 'postgresql://neondb_owner:npg_jdJ2nNyM8mXs@ep-super-heart-abaksv5y-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require'
+    
+    if DATABASE_URL:
+        # For Render deployment
+        SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    elif NEON_DATABASE_URL:
+        # For local development with Neon
+        SQLALCHEMY_DATABASE_URI = NEON_DATABASE_URL
+    else:
+        # Fallback to SQLite for testing
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///staff_management.db'
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -20,7 +31,7 @@ class Config:
     }
     
     UPLOAD_FOLDER = 'uploads'
-    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB max file size (increased for images)
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB max file size
     
     # Folder paths
     STAFF_IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'staff_images')
