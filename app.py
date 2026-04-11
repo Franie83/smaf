@@ -11,10 +11,6 @@ import base64
 import numpy as np
 import tempfile
 
-# For WhatsApp sharing
-import pywhatkit as kit
-import webbrowser
-
 from config import Config
 from models import db, Staff, Admin, ImportLog
 from utils import process_imported_staff, download_from_google_drive, save_image_file, clean_filename, init_db
@@ -185,21 +181,6 @@ if REMBG_AVAILABLE:
     remove_signature_background = remove_signature_background_rembg
 else:
     remove_signature_background = make_background_transparent_with_edges
-
-# ==================== SHARING FUNCTIONS ====================
-
-def share_via_whatsapp(phone_number, file_path, caption=""):
-    """Share file via WhatsApp"""
-    try:
-        if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-            kit.sendwhats_image(phone_number, file_path, caption, wait_time=15, close_time=3)
-            return True
-        else:
-            webbrowser.open(f"https://web.whatsapp.com/")
-            return True
-    except Exception as e:
-        print(f"WhatsApp sharing error: {e}")
-        return False
 
 # ==================== ROUTES ====================
 
