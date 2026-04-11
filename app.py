@@ -15,16 +15,26 @@ from config import Config
 from models import db, Staff, Admin, ImportLog
 from utils import process_imported_staff, download_from_google_drive, save_image_file, clean_filename, init_db
 
-# Import rembg - only once
-try:
-    from rembg import remove
-    from rembg.session_factory import new_session
-    REMBG_AVAILABLE = True
-    rembg_session = new_session("u2net")
-    print("✅ rembg loaded successfully")
-except Exception as e:
+# ==================== DISABLE REMBG ON RENDER ====================
+# Set DISABLE_REMBG=true in Render environment variables to save memory
+DISABLE_REMBG = os.environ.get('DISABLE_REMBG', 'False').lower() == 'true'
+
+# Import rembg - only if not disabled
+if not DISABLE_REMBG:
+    try:
+        from rembg import remove
+        from rembg.session_factory import new_session
+        REMBG_AVAILABLE = True
+        rembg_session = new_session("u2net")
+        print("✅ rembg loaded successfully")
+    except Exception as e:
+        REMBG_AVAILABLE = False
+        print(f"❌ rembg not available: {e}")
+        def remove(x, session=None):
+            return x
+else:
     REMBG_AVAILABLE = False
-    print(f"❌ rembg not available: {e}")
+    print("ℹ️ rembg disabled for this environment (DISABLE_REMBG=true)")
     def remove(x, session=None):
         return x
 
@@ -71,6 +81,10 @@ def save_image_from_data_url(data_url, folder, filename):
 
 def remove_signature_background_rembg(image_path, output_path):
     """Remove background using rembg AI"""
+    if not REMBG_AVAILABLE:
+        print("❌ rembg not available - background removal skipped")
+        return False
+    
     try:
         with open(image_path, 'rb') as f:
             input_image = f.read()
@@ -430,6 +444,9 @@ def remove_single_background(id):
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
     
+    if not REMBG_AVAILABLE:
+        return jsonify({'error': 'Background removal is disabled in this environment'}), 503
+    
     staff = Staff.query.get_or_404(id)
     
     if not staff.signature_path:
@@ -463,6 +480,9 @@ def bulk_remove_backgrounds():
     """Remove backgrounds for signatures based on current filters"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
+    
+    if not REMBG_AVAILABLE:
+        return jsonify({'error': 'Background removal is disabled in this environment'}), 503
     
     # Get filter parameters from request args
     search = request.args.get('search', '')
@@ -555,90 +575,6 @@ def get_staff_details(staff_id):
         'signature_url': signature_url,
         'has_clean': has_clean
     })
-
-@app.route('/get-share-info/<int:staff_id>/<string:type>')
-@login_required
-def get_share_info(staff_id, type):
-    """Get shareable URL for photo or signature"""
-    staff = Staff.query.get_or_404(staff_id)
-    
-    if type == 'photo':
-        if not staff.image_path or not os.path.exists(staff.image_path):
-            return jsonify({'error': 'No photo found'}), 404
-        filename = os.path.basename(staff.image_path)
-        url = url_for('uploaded_file', folder='staff_images', filename=filename, _external=True)
-        return jsonify({
-            'success': True,
-            'url': url,
-            'name': f"{staff.full_name}'s Photo"
-        })
-    
-    elif type == 'signature':
-        if staff.signature_bg_removed_path:
-            clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
-            if os.path.exists(clean_path):
-                url = url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path, _external=True)
-                return jsonify({
-                    'success': True,
-                    'url': url,
-                    'name': f"{staff.full_name}'s Signature (Clean)"
-                })
-        
-        if staff.signature_path and os.path.exists(staff.signature_path):
-            filename = os.path.basename(staff.signature_path)
-            url = url_for('uploaded_file', folder='staff_signatures', filename=filename, _external=True)
-            return jsonify({
-                'success': True,
-                'url': url,
-                'name': f"{staff.full_name}'s Signature"
-            })
-        
-        return jsonify({'error': 'No signature found'}), 404
-    
-    return jsonify({'error': 'Invalid type'}), 400
-
-@app.route('/share-whatsapp', methods=['POST'])
-@login_required
-def share_whatsapp():
-    """Share photo or signature via WhatsApp"""
-    data = request.json
-    staff_id = data.get('staff_id')
-    share_type = data.get('type')
-    phone_number = data.get('phone_number')
-    
-    if not phone_number:
-        return jsonify({'error': 'Phone number required'}), 400
-    
-    if not phone_number.startswith('+'):
-        phone_number = '+' + phone_number
-    
-    staff = Staff.query.get_or_404(staff_id)
-    
-    if share_type == 'photo':
-        if not staff.image_path or not os.path.exists(staff.image_path):
-            return jsonify({'error': 'No photo found'}), 404
-        file_path = staff.image_path
-        caption = f"Photo of {staff.full_name}\nMinistry: {staff.ministry or 'N/A'}\nDepartment: {staff.department or 'N/A'}"
-    else:
-        if staff.signature_bg_removed_path:
-            file_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
-        elif staff.signature_path:
-            file_path = staff.signature_path
-        else:
-            return jsonify({'error': 'No signature found'}), 404
-        caption = f"Signature of {staff.full_name}\nMinistry: {staff.ministry or 'N/A'}\nDepartment: {staff.department or 'N/A'}"
-    
-    if not os.path.exists(file_path):
-        return jsonify({'error': 'File not found'}), 404
-    
-    try:
-        kit.sendwhats_image(phone_number, file_path, caption, wait_time=15, close_time=3)
-        return jsonify({'success': True, 'message': 'WhatsApp sharing initiated! Check your WhatsApp.'})
-    except Exception as e:
-        print(f"WhatsApp error: {e}")
-        whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_number}&text={caption}"
-        webbrowser.open(whatsapp_url)
-        return jsonify({'success': True, 'message': 'WhatsApp Web opened. Please send the file manually.'})
 
 # ==================== DOWNLOAD ROUTES ====================
 
@@ -968,6 +904,10 @@ def signature_remover():
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
     
+    if not REMBG_AVAILABLE:
+        flash('Background removal is disabled in this environment.', 'warning')
+        return render_template('signature_remover.html')
+    
     if request.method == 'POST':
         files = request.files.getlist('signatures')
         results = []
@@ -1108,8 +1048,6 @@ def staff_dashboard():
         return redirect(url_for('admin_dashboard'))
     
     return render_template('staff_dashboard.html', staff=current_user)
-
-# ==================== RUN APP ====================
 
 # ==================== RUN APP ====================
 
