@@ -16,7 +16,6 @@ rembg==2.0.50
 onnxruntime==1.15.1
 scipy==1.10.1
 qrcode==7.4.2
-pywhatkit==5.4
 opencv-python==4.8.1.78
 cloudinary==1.36.0
 gunicorn==21.2.0
