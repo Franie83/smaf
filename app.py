@@ -33,15 +33,21 @@ else:
     print("⚠️ Cloudinary not configured - clean signatures will be stored locally only")
 
 # ==================== WHATSAPP IMPORTS (Conditional) ====================
-if not DISABLE_WHATSAPP:
-    import pywhatkit as kit
-    import webbrowser
-    print("✅ WhatsApp sharing enabled")
-else:
-    kit = None
-    webbrowser = None
-    print("ℹ️ WhatsApp sharing disabled")
+# ==================== WHATSAPP IMPORTS (Conditional) ====================
+kit = None
+webbrowser = None
 
+if not DISABLE_WHATSAPP:
+    try:
+        import pywhatkit as kit
+        import webbrowser
+        print("✅ WhatsApp sharing enabled")
+    except ImportError as e:
+        print(f"⚠️ Could not import pywhatkit: {e}")
+        kit = None
+        webbrowser = None
+else:
+    print("ℹ️ WhatsApp sharing disabled")
 # ==================== REMBG IMPORTS (Conditional) ====================
 if not DISABLE_REMBG:
     try:
