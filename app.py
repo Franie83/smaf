@@ -321,27 +321,76 @@ def register():
         department = request.form.get('department')
         designation = request.form.get('designation')
         
-        image_path = None
+        image_url = None
         photo_data = request.form.get('photo_data')
         photo_file = request.files.get('photo')
         
-        if photo_data and photo_data.startswith('data:image'):
-            filename = f"staff_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            image_path = save_image_from_data_url(photo_data, Config.STAFF_IMAGES_FOLDER, filename)
-        elif photo_file and photo_file.filename:
-            filename = f"staff_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            image_path = save_image_file(photo_file.read(), filename, Config.STAFF_IMAGES_FOLDER)
+        # Handle photo upload to Cloudinary
+        if photo_file and photo_file.filename:
+            try:
+                upload_result = cloudinary.uploader.upload(
+                    photo_file,
+                    folder="staff_photos",
+                    public_id=f"staff_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_photo",
+                    overwrite=True
+                )
+                image_url = upload_result['secure_url']
+                print(f"✅ Photo uploaded to Cloudinary: {image_url}")
+            except Exception as e:
+                print(f"Cloudinary photo error: {e}")
+                flash(f'Photo upload failed: {str(e)}', 'danger')
+                return render_template('register.html')
+        elif photo_data and photo_data.startswith('data:image'):
+            try:
+                # Save temp file from camera capture
+                header, encoded = photo_data.split(',', 1)
+                image_bytes = base64.b64decode(encoded)
+                temp_path = os.path.join('temp', f"temp_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                with open(temp_path, 'wb') as f:
+                    f.write(image_bytes)
+                upload_result = cloudinary.uploader.upload(temp_path, folder="staff_photos")
+                image_url = upload_result['secure_url']
+                os.remove(temp_path)
+                print(f"✅ Camera photo uploaded to Cloudinary: {image_url}")
+            except Exception as e:
+                print(f"Camera upload error: {e}")
+                flash(f'Photo upload failed: {str(e)}', 'danger')
+                return render_template('register.html')
         
-        signature_path = None
+        signature_url = None
         signature_data = request.form.get('signature_data')
         signature_file = request.files.get('signature')
         
-        if signature_data and signature_data.startswith('data:image'):
-            filename = f"signature_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            signature_path = save_image_from_data_url(signature_data, Config.STAFF_SIGNATURES_FOLDER, filename)
-        elif signature_file and signature_file.filename:
-            filename = f"signature_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            signature_path = save_image_file(signature_file.read(), filename, Config.STAFF_SIGNATURES_FOLDER)
+        # Handle signature upload to Cloudinary
+        if signature_file and signature_file.filename:
+            try:
+                upload_result = cloudinary.uploader.upload(
+                    signature_file,
+                    folder="staff_signatures",
+                    public_id=f"signature_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    overwrite=True
+                )
+                signature_url = upload_result['secure_url']
+                print(f"✅ Signature uploaded to Cloudinary: {signature_url}")
+            except Exception as e:
+                print(f"Cloudinary signature error: {e}")
+                flash(f'Signature upload failed: {str(e)}', 'danger')
+                return render_template('register.html')
+        elif signature_data and signature_data.startswith('data:image'):
+            try:
+                header, encoded = signature_data.split(',', 1)
+                image_bytes = base64.b64decode(encoded)
+                temp_path = os.path.join('temp', f"temp_signature_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                with open(temp_path, 'wb') as f:
+                    f.write(image_bytes)
+                upload_result = cloudinary.uploader.upload(temp_path, folder="staff_signatures")
+                signature_url = upload_result['secure_url']
+                os.remove(temp_path)
+                print(f"✅ Camera signature uploaded to Cloudinary: {signature_url}")
+            except Exception as e:
+                print(f"Camera upload error: {e}")
+                flash(f'Signature upload failed: {str(e)}', 'danger')
+                return render_template('register.html')
         
         if all([full_name, email, phone]):
             staff = Staff(
@@ -351,8 +400,8 @@ def register():
                 ministry=ministry,
                 department=department,
                 designation=designation,
-                image_path=image_path,
-                signature_path=signature_path
+                image_path=image_url,  # Now stores Cloudinary URL
+                signature_path=signature_url  # Now stores Cloudinary URL
             )
             
             db.session.add(staff)
@@ -364,7 +413,6 @@ def register():
             flash('Please fill all required fields', 'danger')
     
     return render_template('register.html')
-
 @app.route('/logout')
 @login_required
 def logout():
@@ -1024,6 +1072,40 @@ def edit_staff(id):
         if new_password and new_password.strip():
             staff.set_password(new_password.strip())
         
+        # Handle photo upload if a new photo is provided
+        photo_file = request.files.get('photo')
+        if photo_file and photo_file.filename:
+            try:
+                upload_result = cloudinary.uploader.upload(
+                    photo_file,
+                    folder="staff_photos",
+                    public_id=f"staff_{staff.id}_photo",
+                    overwrite=True
+                )
+                staff.image_path = upload_result['secure_url']
+                print(f"✅ Photo uploaded to Cloudinary for {staff.full_name}")
+            except Exception as e:
+                print(f"Cloudinary photo error: {e}")
+                flash(f'Photo upload failed: {str(e)}', 'danger')
+                return render_template('edit_staff.html', staff=staff)
+        
+        # Handle signature upload if a new signature is provided
+        signature_file = request.files.get('signature')
+        if signature_file and signature_file.filename:
+            try:
+                upload_result = cloudinary.uploader.upload(
+                    signature_file,
+                    folder="staff_signatures",
+                    public_id=f"staff_{staff.id}_signature",
+                    overwrite=True
+                )
+                staff.signature_path = upload_result['secure_url']
+                print(f"✅ Signature uploaded to Cloudinary for {staff.full_name}")
+            except Exception as e:
+                print(f"Cloudinary signature error: {e}")
+                flash(f'Signature upload failed: {str(e)}', 'danger')
+                return render_template('edit_staff.html', staff=staff)
+        
         try:
             db.session.commit()
             flash('Staff updated successfully!', 'success')
@@ -1034,7 +1116,6 @@ def edit_staff(id):
             return render_template('edit_staff.html', staff=staff)
     
     return render_template('edit_staff.html', staff=staff)
-
 @app.route('/admin/staff/delete/<int:id>')
 @login_required
 def delete_staff(id):

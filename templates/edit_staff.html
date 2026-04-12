@@ -70,6 +70,14 @@
         opacity: 0.7;
         cursor: not-allowed;
     }
+    .cloud-badge {
+        background-color: #17a2b8;
+        color: white;
+        font-size: 0.7rem;
+        margin-left: 5px;
+        padding: 2px 6px;
+        border-radius: 10px;
+    }
 </style>
 {% endblock %}
 
@@ -84,7 +92,7 @@
                     </h4>
                 </div>
                 <div class="card-body">
-                    <form method="POST" id="editStaffForm">
+                    <form method="POST" id="editStaffForm" enctype="multipart/form-data">
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
@@ -131,9 +139,12 @@
                                 <div class="image-editor-section">
                                     <h6><i class="fas fa-user-circle"></i> Profile Photo</h6>
                                     <div class="current-image">
-                                        {% if staff.image_path and staff.image_path|length > 0 %}
-                                            <img id="currentPhoto" src="{{ url_for('uploaded_file', folder='staff_images', filename=staff.image_path.split('/')[-1]) }}" 
+                                        {% if staff.image_path %}
+                                            <img id="currentPhoto" src="{{ staff.image_path }}" 
                                                  class="image-preview" style="max-height: 200px;">
+                                            {% if staff.image_path.startswith('http') %}
+                                                <span class="cloud-badge">☁️ Cloud</span>
+                                            {% endif %}
                                         {% else %}
                                             <img id="currentPhoto" src="{{ url_for('static', filename='default-avatar.png') }}" 
                                                  class="image-preview" style="max-height: 200px; display: none;">
@@ -154,16 +165,27 @@
                                 <div class="image-editor-section mt-3">
                                     <h6><i class="fas fa-signature"></i> Signature</h6>
                                     <div class="current-image">
-                                        {% if staff.signature_path and staff.signature_path|length > 0 %}
-                                            <img id="currentSignature" src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff.signature_path.split('/')[-1]) }}" 
+                                        {% if staff.signature_path %}
+                                            <img id="currentSignature" src="{{ staff.signature_path }}" 
                                                  class="signature-preview">
+                                            {% if staff.signature_path.startswith('http') %}
+                                                <span class="cloud-badge">☁️ Cloud</span>
+                                            {% endif %}
                                         {% else %}
                                             <img id="currentSignature" src="{{ url_for('static', filename='default-signature.png') }}" 
                                                  class="signature-preview" style="display: none;">
                                             <div id="noSigMsg" class="text-muted">No signature uploaded</div>
                                         {% endif %}
                                         
-                                        {% if staff.signature_bg_removed_path %}
+                                        {% if staff.signature_bg_removed_url %}
+                                            <div class="mt-2">
+                                                <small class="text-success">✓ Clean version available</small>
+                                                <br>
+                                                <img src="{{ staff.signature_bg_removed_url }}" 
+                                                     class="signature-preview" style="max-height: 100px;">
+                                                <span class="cloud-badge">☁️ Cloud</span>
+                                            </div>
+                                        {% elif staff.signature_bg_removed_path %}
                                             <div class="mt-2">
                                                 <small class="text-success">✓ Clean version available</small>
                                                 <br>
