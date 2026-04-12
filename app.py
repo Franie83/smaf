@@ -11,15 +11,38 @@ import base64
 import numpy as np
 import tempfile
 
+# ==================== CLOUDINARY IMPORTS ====================
+import cloudinary
+import cloudinary.uploader
 from config import Config
-from models import db, Staff, Admin, ImportLog
-from utils import process_imported_staff, download_from_google_drive, save_image_file, clean_filename, init_db
 
-# ==================== DISABLE REMBG ON RENDER ====================
-# Set DISABLE_REMBG=true in Render environment variables to save memory
+# ==================== ENVIRONMENT DETECTION ====================
+# Set DISABLE_WHATSAPP=true and DISABLE_REMBG=true on Render only
+DISABLE_WHATSAPP = os.environ.get('DISABLE_WHATSAPP', 'False').lower() == 'true'
 DISABLE_REMBG = os.environ.get('DISABLE_REMBG', 'False').lower() == 'true'
 
-# Import rembg - only if not disabled
+# Initialize Cloudinary if configured
+if Config.CLOUDINARY_CLOUD_NAME:
+    cloudinary.config(
+        cloud_name=Config.CLOUDINARY_CLOUD_NAME,
+        api_key=Config.CLOUDINARY_API_KEY,
+        api_secret=Config.CLOUDINARY_API_SECRET
+    )
+    print("✅ Cloudinary configured")
+else:
+    print("⚠️ Cloudinary not configured - clean signatures will be stored locally only")
+
+# ==================== WHATSAPP IMPORTS (Conditional) ====================
+if not DISABLE_WHATSAPP:
+    import pywhatkit as kit
+    import webbrowser
+    print("✅ WhatsApp sharing enabled")
+else:
+    kit = None
+    webbrowser = None
+    print("ℹ️ WhatsApp sharing disabled")
+
+# ==================== REMBG IMPORTS (Conditional) ====================
 if not DISABLE_REMBG:
     try:
         from rembg import remove
@@ -34,9 +57,13 @@ if not DISABLE_REMBG:
             return x
 else:
     REMBG_AVAILABLE = False
-    print("ℹ️ rembg disabled for this environment (DISABLE_REMBG=true)")
+    print("ℹ️ rembg disabled for this environment")
     def remove(x, session=None):
         return x
+
+from config import Config
+from models import db, Staff, Admin, ImportLog
+from utils import process_imported_staff, download_from_google_drive, save_image_file, clean_filename, init_db
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -195,6 +222,25 @@ if REMBG_AVAILABLE:
     remove_signature_background = remove_signature_background_rembg
 else:
     remove_signature_background = make_background_transparent_with_edges
+
+# ==================== SHARING FUNCTIONS ====================
+
+def share_via_whatsapp(phone_number, file_path, caption=""):
+    """Share file via WhatsApp"""
+    if DISABLE_WHATSAPP or kit is None:
+        print("ℹ️ WhatsApp sharing disabled")
+        return False
+    
+    try:
+        if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            kit.sendwhats_image(phone_number, file_path, caption, wait_time=15, close_time=3)
+            return True
+        else:
+            webbrowser.open(f"https://web.whatsapp.com/")
+            return True
+    except Exception as e:
+        print(f"WhatsApp sharing error: {e}")
+        return False
 
 # ==================== ROUTES ====================
 
@@ -440,7 +486,7 @@ def upload_staff_signature():
 @app.route('/admin/staff/remove-bg/<int:id>')
 @login_required
 def remove_single_background(id):
-    """Remove background from a single signature"""
+    """Remove background from a single signature and upload to Cloudinary"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
     
@@ -463,7 +509,27 @@ def remove_single_background(id):
             success = remove_signature_background(sig_path, clean_path)
             
             if success:
+                # Save local path as fallback
                 staff.signature_bg_removed_path = clean_filename
+                
+                # Upload to Cloudinary if configured
+                if Config.CLOUDINARY_CLOUD_NAME:
+                    try:
+                        upload_result = cloudinary.uploader.upload(
+                            clean_path,
+                            folder="staff_signatures_clean",
+                            public_id=f"staff_{staff.id}_signature_clean",
+                            overwrite=True
+                        )
+                        cloudinary_url = upload_result['secure_url']
+                        staff.signature_bg_removed_url = cloudinary_url
+                        print(f"✅ Uploaded to Cloudinary: {cloudinary_url}")
+                    except Exception as cloud_error:
+                        print(f"⚠️ Cloudinary upload error: {cloud_error}")
+                        print("Continuing with local storage only")
+                else:
+                    print("ℹ️ Cloudinary not configured - saving locally only")
+                
                 db.session.commit()
                 return jsonify({'success': True, 'message': 'Background removed successfully!'})
             else:
@@ -527,6 +593,20 @@ def bulk_remove_backgrounds():
                 
                 if success:
                     staff.signature_bg_removed_path = clean_filename
+                    
+                    # Upload to Cloudinary if configured
+                    if Config.CLOUDINARY_CLOUD_NAME:
+                        try:
+                            upload_result = cloudinary.uploader.upload(
+                                clean_path,
+                                folder="staff_signatures_clean",
+                                public_id=f"staff_{staff.id}_signature_clean",
+                                overwrite=True
+                            )
+                            staff.signature_bg_removed_url = upload_result['secure_url']
+                        except Exception as cloud_error:
+                            print(f"⚠️ Cloudinary upload error for {staff.full_name}: {cloud_error}")
+                    
                     processed += 1
                 else:
                     failed += 1
@@ -554,7 +634,11 @@ def get_staff_details(staff_id):
     signature_url = None
     has_clean = False
     
-    if staff.signature_bg_removed_path:
+    # Priority: Cloudinary URL > local clean path > original signature
+    if staff.signature_bg_removed_url:
+        signature_url = staff.signature_bg_removed_url
+        has_clean = True
+    elif staff.signature_bg_removed_path:
         clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
         if os.path.exists(clean_path):
             signature_url = url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path, _external=True)
@@ -575,6 +659,103 @@ def get_staff_details(staff_id):
         'signature_url': signature_url,
         'has_clean': has_clean
     })
+
+@app.route('/get-share-info/<int:staff_id>/<string:type>')
+@login_required
+def get_share_info(staff_id, type):
+    """Get shareable URL for photo or signature"""
+    staff = Staff.query.get_or_404(staff_id)
+    
+    if type == 'photo':
+        if not staff.image_path or not os.path.exists(staff.image_path):
+            return jsonify({'error': 'No photo found'}), 404
+        filename = os.path.basename(staff.image_path)
+        url = url_for('uploaded_file', folder='staff_images', filename=filename, _external=True)
+        return jsonify({
+            'success': True,
+            'url': url,
+            'name': f"{staff.full_name}'s Photo"
+        })
+    
+    elif type == 'signature':
+        # Priority: Cloudinary URL > local clean path > original signature
+        if staff.signature_bg_removed_url:
+            return jsonify({
+                'success': True,
+                'url': staff.signature_bg_removed_url,
+                'name': f"{staff.full_name}'s Signature (Clean - Cloud)"
+            })
+        elif staff.signature_bg_removed_path:
+            clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
+            if os.path.exists(clean_path):
+                url = url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path, _external=True)
+                return jsonify({
+                    'success': True,
+                    'url': url,
+                    'name': f"{staff.full_name}'s Signature (Clean)"
+                })
+        
+        if staff.signature_path and os.path.exists(staff.signature_path):
+            filename = os.path.basename(staff.signature_path)
+            url = url_for('uploaded_file', folder='staff_signatures', filename=filename, _external=True)
+            return jsonify({
+                'success': True,
+                'url': url,
+                'name': f"{staff.full_name}'s Signature"
+            })
+        
+        return jsonify({'error': 'No signature found'}), 404
+    
+    return jsonify({'error': 'Invalid type'}), 400
+
+@app.route('/share-whatsapp', methods=['POST'])
+@login_required
+def share_whatsapp():
+    """Share photo or signature via WhatsApp"""
+    if DISABLE_WHATSAPP or kit is None:
+        return jsonify({'error': 'WhatsApp sharing is disabled in this environment'}), 503
+    
+    data = request.json
+    staff_id = data.get('staff_id')
+    share_type = data.get('type')
+    phone_number = data.get('phone_number')
+    
+    if not phone_number:
+        return jsonify({'error': 'Phone number required'}), 400
+    
+    if not phone_number.startswith('+'):
+        phone_number = '+' + phone_number
+    
+    staff = Staff.query.get_or_404(staff_id)
+    
+    if share_type == 'photo':
+        if not staff.image_path or not os.path.exists(staff.image_path):
+            return jsonify({'error': 'No photo found'}), 404
+        file_path = staff.image_path
+        caption = f"Photo of {staff.full_name}\nMinistry: {staff.ministry or 'N/A'}\nDepartment: {staff.department or 'N/A'}"
+    else:
+        # Priority: Cloudinary URL > local clean path > original signature
+        if staff.signature_bg_removed_url:
+            file_path = staff.signature_bg_removed_url
+        elif staff.signature_bg_removed_path:
+            file_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
+        elif staff.signature_path:
+            file_path = staff.signature_path
+        else:
+            return jsonify({'error': 'No signature found'}), 404
+        caption = f"Signature of {staff.full_name}\nMinistry: {staff.ministry or 'N/A'}\nDepartment: {staff.department or 'N/A'}"
+    
+    if isinstance(file_path, str) and not file_path.startswith('http') and not os.path.exists(file_path):
+        return jsonify({'error': 'File not found'}), 404
+    
+    try:
+        kit.sendwhats_image(phone_number, file_path, caption, wait_time=15, close_time=3)
+        return jsonify({'success': True, 'message': 'WhatsApp sharing initiated! Check your WhatsApp.'})
+    except Exception as e:
+        print(f"WhatsApp error: {e}")
+        whatsapp_url = f"https://web.whatsapp.com/send?phone={phone_number}&text={caption}"
+        webbrowser.open(whatsapp_url)
+        return jsonify({'success': True, 'message': 'WhatsApp Web opened. Please send the file manually.'})
 
 # ==================== DOWNLOAD ROUTES ====================
 
@@ -1052,14 +1233,7 @@ def staff_dashboard():
 # ==================== RUN APP ====================
 
 if __name__ == '__main__':
-    # Initialize database and create tables
     with app.app_context():
         db.create_all()
         init_db()
-    
-    # Get port from environment variable (Render sets this to 10000)
-    port = int(os.environ.get('PORT', 5000))
-    
-    # Bind to all network interfaces (required for Render)
-    # Set debug=False for production
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=5000)

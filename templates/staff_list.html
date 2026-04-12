@@ -51,6 +51,12 @@
         color: white;
         font-size: 0.7rem;
     }
+    .badge-cloud {
+        background-color: #17a2b8;
+        color: white;
+        font-size: 0.7rem;
+        margin-left: 5px;
+    }
     .modal-body .staff-detail {
         margin-bottom: 15px;
     }
@@ -214,17 +220,22 @@
                             <i class="fas fa-building"></i> {{ staff_member.ministry or 'No Ministry' }}
                         </div>
                         
-                        <!-- Signature Preview -->
+                        <!-- Signature Preview - Updated with Cloudinary support -->
                         <div class="mt-2">
-                            {% if staff_member.signature_bg_removed_path %}
-                            <img src="{{ url_for('uploaded_file', folder='staff_signatures_clean', filename=staff_member.signature_bg_removed_path) }}" 
-                                 class="signature-preview">
-                            <br><span class="badge badge-clean">✓ Clean Signature</span>
+                            {% if staff_member.signature_bg_removed_url %}
+                                <img src="{{ staff_member.signature_bg_removed_url }}" 
+                                     class="signature-preview" alt="Clean Signature">
+                                <br><span class="badge badge-clean">✓ Clean Signature</span>
+                                <span class="badge badge-cloud">☁️ Cloud</span>
+                            {% elif staff_member.signature_bg_removed_path %}
+                                <img src="{{ url_for('uploaded_file', folder='staff_signatures_clean', filename=staff_member.signature_bg_removed_path) }}" 
+                                     class="signature-preview" alt="Clean Signature">
+                                <br><span class="badge badge-clean">✓ Clean Signature</span>
                             {% elif staff_member.signature_path %}
-                            <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff_member.signature_path.split('/')[-1]) }}" 
-                                 class="signature-preview">
+                                <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff_member.signature_path.split('/')[-1]) }}" 
+                                     class="signature-preview" alt="Signature">
                             {% else %}
-                            <span class="text-muted small">No signature</span>
+                                <span class="text-muted small">No signature</span>
                             {% endif %}
                         </div>
                         
@@ -239,7 +250,7 @@
                             <button class="btn btn-primary btn-sm" onclick="editStaff({{ staff_member.id }})">
                                 <i class="fas fa-edit"></i> Edit
                             </button>
-                            {% if staff_member.signature_path and not staff_member.signature_bg_removed_path %}
+                            {% if staff_member.signature_path and not staff_member.signature_bg_removed_path and not staff_member.signature_bg_removed_url %}
                             <button class="btn btn-warning btn-sm btn-remove-bg" onclick="removeBackground({{ staff_member.id }})" id="removeBgBtn{{ staff_member.id }}">
                                 <i class="fas fa-magic"></i> Remove BG
                             </button>
@@ -426,8 +437,10 @@
         }
         
         const button = document.getElementById(`removeBgBtn${staffId}`);
+        let originalText = '';
+        
         if (button) {
-            const originalText = button.innerHTML;
+            originalText = button.innerHTML;
             button.innerHTML = '<span class="loading"></span> Processing...';
             button.disabled = true;
         }
@@ -470,9 +483,13 @@
         }
         
         const button = document.getElementById('bulkRemoveBtn');
-        const originalText = button.innerHTML;
-        button.innerHTML = '<span class="loading"></span> Processing...';
-        button.disabled = true;
+        let originalText = '';
+        
+        if (button) {
+            originalText = button.innerHTML;
+            button.innerHTML = '<span class="loading"></span> Processing...';
+            button.disabled = true;
+        }
         
         const params = new URLSearchParams();
         if (searchTerm) params.append('search', searchTerm);
@@ -498,8 +515,10 @@
         } catch (error) {
             showNotification('Error processing bulk removal: ' + error.message, 'danger');
         } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
+            if (button) {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
         }
     }
     
@@ -644,9 +663,13 @@
         
         const type = currentShareType || 'signature';
         const button = document.getElementById('sendWhatsAppBtn');
-        const originalText = button.innerHTML;
-        button.innerHTML = '<span class="loading"></span> Sending...';
-        button.disabled = true;
+        let originalText = '';
+        
+        if (button) {
+            originalText = button.innerHTML;
+            button.innerHTML = '<span class="loading"></span> Sending...';
+            button.disabled = true;
+        }
         
         try {
             const response = await fetch('/share-whatsapp', {
@@ -672,8 +695,10 @@
         } catch (error) {
             showNotification('Error sharing via WhatsApp: ' + error.message, 'danger');
         } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
+            if (button) {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
         }
     }
     

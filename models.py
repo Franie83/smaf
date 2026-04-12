@@ -18,6 +18,7 @@ class Staff(db.Model, UserMixin):
     image_path = db.Column(db.String(500))
     signature_path = db.Column(db.String(500))
     signature_bg_removed_path = db.Column(db.String(500))
+    signature_bg_removed_url = db.Column(db.String(500))  # Cloudinary URL for clean signature
     username = db.Column(db.String(80), unique=True, nullable=True)
     password_hash = db.Column(db.String(200))  # Renamed from 'password' to avoid confusion
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
