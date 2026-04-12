@@ -312,59 +312,6 @@ def admin_login():
     return render_template('admin_login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        full_name = request.form.get('full_name')
-        email = request.form.get('email')
-        phone = request.form.get('phone')
-        ministry = request.form.get('ministry')
-        department = request.form.get('department')
-        designation = request.form.get('designation')
-        
-        image_path = None
-        photo_data = request.form.get('photo_data')
-        photo_file = request.files.get('photo')
-        
-        if photo_data and photo_data.startswith('data:image'):
-            filename = f"staff_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            image_path = save_image_from_data_url(photo_data, Config.STAFF_IMAGES_FOLDER, filename)
-        elif photo_file and photo_file.filename:
-            filename = f"staff_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            image_path = save_image_file(photo_file.read(), filename, Config.STAFF_IMAGES_FOLDER)
-        
-        signature_path = None
-        signature_data = request.form.get('signature_data')
-        signature_file = request.files.get('signature')
-        
-        if signature_data and signature_data.startswith('data:image'):
-            filename = f"signature_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            signature_path = save_image_from_data_url(signature_data, Config.STAFF_SIGNATURES_FOLDER, filename)
-        elif signature_file and signature_file.filename:
-            filename = f"signature_{full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            signature_path = save_image_file(signature_file.read(), filename, Config.STAFF_SIGNATURES_FOLDER)
-        
-        if all([full_name, email, phone]):
-            staff = Staff(
-                full_name=full_name,
-                email=email,
-                phone_number=phone,
-                ministry=ministry,
-                department=department,
-                designation=designation,
-                image_path=image_path,
-                signature_path=signature_path
-            )
-            
-            db.session.add(staff)
-            db.session.commit()
-            
-            flash('Registration submitted successfully! Admin will set your credentials.', 'success')
-            return redirect(url_for('staff_login'))
-        else:
-            flash('Please fill all required fields', 'danger')
-    
-    return render_template('register.html')
-
 @app.route('/logout')
 @login_required
 def logout():
