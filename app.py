@@ -426,7 +426,7 @@ def save_edited_image():
 @app.route('/upload-staff-photo', methods=['POST'])
 @login_required
 def upload_staff_photo():
-    """Upload new staff photo"""
+    """Upload new staff photo to Cloudinary"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
     
@@ -440,25 +440,33 @@ def upload_staff_photo():
         staff = Staff.query.get_or_404(staff_id)
         clean_name = clean_filename(staff.full_name)
         
-        filename = f"{clean_name}_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        filepath = save_image_file(photo.read(), filename, Config.STAFF_IMAGES_FOLDER)
+        # Upload to Cloudinary
+        upload_result = cloudinary.uploader.upload(
+            photo,
+            folder="staff_photos",
+            public_id=f"staff_{staff.id}_photo",
+            overwrite=True
+        )
+        cloudinary_url = upload_result['secure_url']
         
-        if staff.image_path and os.path.exists(staff.image_path):
-            os.remove(staff.image_path)
+        # Delete old photo from local storage if it exists and is a local file
+        if staff.image_path and not staff.image_path.startswith('http'):
+            if os.path.exists(staff.image_path):
+                os.remove(staff.image_path)
         
-        staff.image_path = filepath
+        # Save Cloudinary URL to database
+        staff.image_path = cloudinary_url
         db.session.commit()
         
-        return jsonify({'success': True, 'image_url': url_for('uploaded_file', folder='staff_images', filename=filename)})
+        return jsonify({'success': True, 'image_url': cloudinary_url})
         
     except Exception as e:
         print(f"Error uploading photo: {e}")
         return jsonify({'error': str(e)}), 500
-
 @app.route('/upload-staff-signature', methods=['POST'])
 @login_required
 def upload_staff_signature():
-    """Upload new staff signature"""
+    """Upload new staff signature to Cloudinary"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
     
@@ -472,22 +480,29 @@ def upload_staff_signature():
         staff = Staff.query.get_or_404(staff_id)
         clean_name = clean_filename(staff.full_name)
         
-        filename = f"{clean_name}_signature_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        filepath = save_image_file(signature.read(), filename, Config.STAFF_SIGNATURES_FOLDER)
+        # Upload to Cloudinary
+        upload_result = cloudinary.uploader.upload(
+            signature,
+            folder="staff_signatures",
+            public_id=f"staff_{staff.id}_signature",
+            overwrite=True
+        )
+        cloudinary_url = upload_result['secure_url']
         
-        if staff.signature_path and os.path.exists(staff.signature_path):
-            os.remove(staff.signature_path)
+        # Delete old signature from local storage if it exists and is a local file
+        if staff.signature_path and not staff.signature_path.startswith('http'):
+            if os.path.exists(staff.signature_path):
+                os.remove(staff.signature_path)
         
-        staff.signature_path = filepath
+        # Save Cloudinary URL to database
+        staff.signature_path = cloudinary_url
         db.session.commit()
         
-        return jsonify({'success': True, 'signature_url': url_for('uploaded_file', folder='staff_signatures', filename=filename)})
+        return jsonify({'success': True, 'signature_url': cloudinary_url})
         
     except Exception as e:
         print(f"Error uploading signature: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# ==================== BACKGROUND REMOVAL ROUTES ====================
+        return jsonify({'error': str(e)}), 500# ==================== BACKGROUND REMOVAL ROUTES ====================
 
 @app.route('/admin/staff/remove-bg/<int:id>')
 @login_required

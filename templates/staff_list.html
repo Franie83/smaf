@@ -199,46 +199,40 @@
                      data-id="{{ staff_member.id }}">
                     <div class="card-body text-center">
                         <!-- Photo -->
-                        <div>
-                            {% if staff_member.image_path %}
-                            <img src="{{ url_for('uploaded_file', folder='staff_images', filename=staff_member.image_path.split('/')[-1]) }}" 
-                                 class="staff-avatar">
-                            {% else %}
-                            <div class="staff-avatar bg-secondary d-flex align-items-center justify-content-center">
-                                <i class="fas fa-user fa-3x text-white"></i>
-                            </div>
-                            {% endif %}
-                        </div>
-                        
-                        <!-- Name -->
-                        <div class="staff-name">
-                            {{ staff_member.full_name }}
-                        </div>
-                        
-                        <!-- Ministry -->
-                        <div class="staff-ministry">
-                            <i class="fas fa-building"></i> {{ staff_member.ministry or 'No Ministry' }}
-                        </div>
-                        
-                        <!-- Signature Preview - Updated with Cloudinary support -->
-                        <div class="mt-2">
-                            {% if staff_member.signature_bg_removed_url %}
-                                <img src="{{ staff_member.signature_bg_removed_url }}" 
-                                     class="signature-preview" alt="Clean Signature">
-                                <br><span class="badge badge-clean">✓ Clean Signature</span>
-                                <span class="badge badge-cloud">☁️ Cloud</span>
-                            {% elif staff_member.signature_bg_removed_path %}
-                                <img src="{{ url_for('uploaded_file', folder='staff_signatures_clean', filename=staff_member.signature_bg_removed_path) }}" 
-                                     class="signature-preview" alt="Clean Signature">
-                                <br><span class="badge badge-clean">✓ Clean Signature</span>
-                            {% elif staff_member.signature_path %}
-                                <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff_member.signature_path.split('/')[-1]) }}" 
-                                     class="signature-preview" alt="Signature">
-                            {% else %}
-                                <span class="text-muted small">No signature</span>
-                            {% endif %}
-                        </div>
-                        
+                        <!-- Photo -->
+<div>
+    {% if staff_member.image_path %}
+        {% if staff_member.image_path.startswith('http') %}
+            <img src="{{ staff_member.image_path }}" class="staff-avatar" alt="Staff Photo">
+        {% else %}
+            <img src="{{ url_for('uploaded_file', folder='staff_images', filename=staff_member.image_path.split('/')[-1]) }}" 
+                 class="staff-avatar">
+        {% endif %}
+    {% else %}
+        <div class="staff-avatar bg-secondary d-flex align-items-center justify-content-center">
+            <i class="fas fa-user fa-3x text-white"></i>
+        </div>
+    {% endif %}
+</div>
+
+                            <!-- Signature Preview -->
+                            <div class="mt-2">
+                                {% if staff_member.signature_bg_removed_url %}
+                                    <img src="{{ staff_member.signature_bg_removed_url }}" 
+                                        class="signature-preview" alt="Clean Signature">
+                                    <br><span class="badge badge-clean">✓ Clean Signature</span>
+                                    <span class="badge badge-cloud">☁️ Cloud</span>
+                                {% elif staff_member.signature_path %}
+                                    {% if staff_member.signature_path.startswith('http') %}
+                                        <img src="{{ staff_member.signature_path }}" class="signature-preview" alt="Signature">
+                                    {% else %}
+                                        <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff_member.signature_path.split('/')[-1]) }}" 
+                                            class="signature-preview" alt="Signature">
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted small">No signature</span>
+                                {% endif %}
+                            </div>                        
                         <!-- Action Buttons -->
                         <div class="action-buttons">
                             <button class="btn btn-info btn-sm" onclick="viewDetails({{ staff_member.id }})">
