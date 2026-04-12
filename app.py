@@ -17,6 +17,7 @@ import cloudinary.uploader
 from config import Config
 import requests
 
+
 # ==================== ENVIRONMENT DETECTION ====================
 # Set DISABLE_WHATSAPP=true and DISABLE_REMBG=true on Render only
 DISABLE_WHATSAPP = os.environ.get('DISABLE_WHATSAPP', 'False').lower() == 'true'
@@ -635,7 +636,8 @@ def remove_single_background(id):
                 os.remove(temp_file)
             except:
                 pass
-        return jsonify({'error': str(e)}), 500@app.route('/admin/bulk-remove-bg', methods=['POST'])
+        return jsonify({'error': str(e)}), 500
+@app.route('/admin/bulk-remove-bg', methods=['POST'])
 @login_required
 def bulk_remove_backgrounds():
     """Remove backgrounds for signatures based on current filters"""
@@ -645,75 +647,101 @@ def bulk_remove_backgrounds():
     if not REMBG_AVAILABLE:
         return jsonify({'error': 'Background removal is disabled in this environment'}), 503
     
-    # Get filter parameters from request args
-    search = request.args.get('search', '')
-    ministry_filter = request.args.get('ministry_filter', '')
-    
-    # Build query with filters
-    query = Staff.query.filter(
-        Staff.signature_path.isnot(None),
-        Staff.signature_bg_removed_path.is_(None)
-    )
-    
-    # Apply search filter
-    if search:
-        query = query.filter(
-            Staff.full_name.contains(search) | 
-            Staff.email.contains(search) | 
-            Staff.phone_number.contains(search)
+    try:
+        # Get filter parameters from request args
+        search = request.args.get('search', '')
+        ministry_filter = request.args.get('ministry_filter', '')
+        
+        # Build query with filters - check BOTH clean signature fields
+        query = Staff.query.filter(
+            Staff.signature_path.isnot(None),
+            Staff.signature_bg_removed_path.is_(None),
+            Staff.signature_bg_removed_url.is_(None)
         )
-    
-    # Apply ministry filter
-    if ministry_filter:
-        query = query.filter(Staff.ministry == ministry_filter)
-    
-    staff_members = query.all()
-    
-    if not staff_members:
-        return jsonify({'processed': 0, 'failed': 0, 'total': 0, 'message': 'No signatures to process with current filters'})
-    
-    processed = 0
-    failed = 0
-    
-    for staff in staff_members:
-        try:
-            sig_filename = os.path.basename(staff.signature_path)
-            sig_path = os.path.join(Config.STAFF_SIGNATURES_FOLDER, sig_filename)
-            
-            if os.path.exists(sig_path):
-                clean_filename = f"clean_{sig_filename}"
-                clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, clean_filename)
+        
+        # Apply search filter
+        if search:
+            query = query.filter(
+                Staff.full_name.contains(search) | 
+                Staff.email.contains(search) | 
+                Staff.phone_number.contains(search)
+            )
+        
+        # Apply ministry filter
+        if ministry_filter:
+            query = query.filter(Staff.ministry == ministry_filter)
+        
+        staff_members = query.all()
+        
+        if not staff_members:
+            return jsonify({'processed': 0, 'failed': 0, 'total': 0, 'message': 'No signatures to process with current filters'})
+        
+        processed = 0
+        failed = 0
+        
+        for staff in staff_members:
+            temp_file = None
+            try:
+                # Determine the source file path
+                if staff.signature_path.startswith('http'):
+                    # It's a Cloudinary URL - download it first
+                    response = requests.get(staff.signature_path)
+                    temp_file = os.path.join('temp', f"temp_sig_{staff.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                    with open(temp_file, 'wb') as f:
+                        f.write(response.content)
+                    sig_path = temp_file
+                else:
+                    # Local file path
+                    sig_filename = os.path.basename(staff.signature_path)
+                    sig_path = os.path.join(Config.STAFF_SIGNATURES_FOLDER, sig_filename)
                 
-                success = remove_signature_background(sig_path, clean_path)
-                
-                if success:
-                    staff.signature_bg_removed_path = clean_filename
+                if os.path.exists(sig_path):
+                    clean_filename = f"clean_{staff.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, clean_filename)
                     
-                    # Upload to Cloudinary if configured
-                    if Config.CLOUDINARY_CLOUD_NAME:
-                        try:
-                            upload_result = cloudinary.uploader.upload(
-                                clean_path,
-                                folder="staff_signatures_clean",
-                                public_id=f"staff_{staff.id}_signature_clean",
-                                overwrite=True
-                            )
-                            staff.signature_bg_removed_url = upload_result['secure_url']
-                        except Exception as cloud_error:
-                            print(f"⚠️ Cloudinary upload error for {staff.full_name}: {cloud_error}")
+                    success = remove_signature_background(sig_path, clean_path)
                     
-                    processed += 1
+                    if success:
+                        # Save local path as fallback
+                        staff.signature_bg_removed_path = clean_filename
+                        
+                        # Upload to Cloudinary if configured
+                        if Config.CLOUDINARY_CLOUD_NAME:
+                            try:
+                                upload_result = cloudinary.uploader.upload(
+                                    clean_path,
+                                    folder="staff_signatures_clean",
+                                    public_id=f"staff_{staff.id}_signature_clean",
+                                    overwrite=True
+                                )
+                                staff.signature_bg_removed_url = upload_result['secure_url']
+                                print(f"✅ Uploaded to Cloudinary: {upload_result['secure_url']}")
+                            except Exception as cloud_error:
+                                print(f"⚠️ Cloudinary upload error: {cloud_error}")
+                        
+                        processed += 1
+                    else:
+                        failed += 1
                 else:
                     failed += 1
-            else:
+                    
+            except Exception as e:
+                print(f"Error processing {staff.full_name}: {e}")
                 failed += 1
-        except Exception as e:
-            print(f"Error processing {staff.full_name}: {e}")
-            failed += 1
-    
-    db.session.commit()
-    return jsonify({'processed': processed, 'failed': failed, 'total': len(staff_members)})
-
+            finally:
+                # Clean up temp file if it was created
+                if temp_file and os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
+        
+        db.session.commit()
+        return jsonify({'processed': processed, 'failed': failed, 'total': len(staff_members)})
+        
+    except Exception as e:
+        print(f"Bulk removal error: {e}")
+        return jsonify({'error': str(e), 'processed': 0, 'failed': 0, 'total': 0}), 500
 # ==================== SHARING ROUTES ====================
 
 @app.route('/get-staff-details/<int:staff_id>')
