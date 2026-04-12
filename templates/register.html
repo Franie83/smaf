@@ -51,6 +51,15 @@
         color: white;
         margin: 5px;
     }
+    .camera-controls {
+        margin-top: 10px;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+    }
+    .camera-selector {
+        margin-bottom: 10px;
+    }
     .required-field::after {
         content: " *";
         color: red;
@@ -102,17 +111,32 @@
                         <div class="col-md-6">
                             <div class="camera-section">
                                 <h6><i class="fas fa-camera"></i> Take Photo with Camera</h6>
+                                
+                                <!-- Camera Selection Dropdown -->
+                                <div class="camera-selector">
+                                    <label>Camera Mode:</label>
+                                    <select id="photoCameraSelect" class="form-select form-select-sm" onchange="switchPhotoCamera()">
+                                        <option value="environment">📷 Back Camera (Document)</option>
+                                        <option value="user">🤳 Front Camera (Selfie)</option>
+                                    </select>
+                                </div>
+                                
                                 <button type="button" class="btn btn-success btn-sm" onclick="startPhotoCamera()">
                                     <i class="fas fa-camera"></i> Open Camera
                                 </button>
                                 <div id="photoCameraContainer" style="display: none;">
-                                    <video id="photoVideo" class="camera-preview" width="100%" autoplay></video>
+                                    <video id="photoVideo" class="camera-preview" width="100%" autoplay playsinline></video>
                                     <div class="capture-buttons">
                                         <button type="button" class="btn btn-primary btn-sm" onclick="capturePhoto()">
                                             <i class="fas fa-camera"></i> Capture
                                         </button>
                                         <button type="button" class="btn btn-danger btn-sm" onclick="stopPhotoCamera()">
                                             <i class="fas fa-stop"></i> Stop
+                                        </button>
+                                    </div>
+                                    <div class="camera-controls">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="switchPhotoCamera()">
+                                            <i class="fas fa-sync-alt"></i> Switch Camera
                                         </button>
                                     </div>
                                 </div>
@@ -146,17 +170,32 @@
                         <div class="col-md-4">
                             <div class="camera-section">
                                 <h6><i class="fas fa-camera"></i> Capture Signature</h6>
+                                
+                                <!-- Camera Selection for Signature -->
+                                <div class="camera-selector">
+                                    <label>Camera Mode:</label>
+                                    <select id="signatureCameraSelect" class="form-select form-select-sm" onchange="switchSignatureCamera()">
+                                        <option value="environment">📷 Back Camera (Document)</option>
+                                        <option value="user">🤳 Front Camera (Selfie)</option>
+                                    </select>
+                                </div>
+                                
                                 <button type="button" class="btn btn-success btn-sm" onclick="startSignatureCamera()">
                                     <i class="fas fa-camera"></i> Open Camera
                                 </button>
                                 <div id="signatureCameraContainer" style="display: none;">
-                                    <video id="signatureVideo" class="camera-preview" width="100%" autoplay></video>
+                                    <video id="signatureVideo" class="camera-preview" width="100%" autoplay playsinline></video>
                                     <div class="capture-buttons">
                                         <button type="button" class="btn btn-primary btn-sm" onclick="captureSignature()">
                                             <i class="fas fa-camera"></i> Capture
                                         </button>
                                         <button type="button" class="btn btn-danger btn-sm" onclick="stopSignatureCamera()">
                                             <i class="fas fa-stop"></i> Stop
+                                        </button>
+                                    </div>
+                                    <div class="camera-controls">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="switchSignatureCamera()">
+                                            <i class="fas fa-sync-alt"></i> Switch Camera
                                         </button>
                                     </div>
                                 </div>
@@ -234,10 +273,12 @@
     let photoStream = null;
     let photoVideo = null;
     let photoCanvas = null;
+    let currentPhotoFacingMode = 'environment'; // 'environment' (back) or 'user' (front)
     
     // Signature Camera Variables
     let signatureStream = null;
     let signatureVideo = null;
+    let currentSignatureFacingMode = 'environment';
     
     // Drawing Variables
     let drawing = false;
@@ -245,23 +286,47 @@
     let signatureCanvas = null;
     
     // Photo Camera Functions
-    function startPhotoCamera() {
+    async function startPhotoCamera() {
         const container = document.getElementById('photoCameraContainer');
         const video = document.getElementById('photoVideo');
         
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(function(stream) {
-                    photoStream = stream;
-                    video.srcObject = stream;
-                    video.play();
-                    container.style.display = 'block';
-                })
-                .catch(function(error) {
-                    alert("Could not access camera: " + error.message + "\nPlease ensure you have granted camera permissions.");
+        // Stop any existing stream
+        if (photoStream) {
+            stopPhotoCamera();
+        }
+        
+        const facingMode = document.getElementById('photoCameraSelect').value;
+        currentPhotoFacingMode = facingMode;
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { exact: facingMode } }
+            });
+            photoStream = stream;
+            video.srcObject = stream;
+            await video.play();
+            container.style.display = 'block';
+        } catch (error) {
+            // Fallback if exact facing mode fails
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode }
                 });
-        } else {
-            alert("Camera not supported in this browser");
+                photoStream = stream;
+                video.srcObject = stream;
+                await video.play();
+                container.style.display = 'block';
+            } catch (fallbackError) {
+                alert("Could not access camera: " + fallbackError.message + "\nPlease ensure you have granted camera permissions.");
+            }
+        }
+    }
+    
+    async function switchPhotoCamera() {
+        const select = document.getElementById('photoCameraSelect');
+        const newFacingMode = select.value;
+        if (newFacingMode !== currentPhotoFacingMode) {
+            await startPhotoCamera();
         }
     }
     
@@ -301,23 +366,45 @@
     }
     
     // Signature Camera Functions
-    function startSignatureCamera() {
+    async function startSignatureCamera() {
         const container = document.getElementById('signatureCameraContainer');
         const video = document.getElementById('signatureVideo');
         
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(function(stream) {
-                    signatureStream = stream;
-                    video.srcObject = stream;
-                    video.play();
-                    container.style.display = 'block';
-                })
-                .catch(function(error) {
-                    alert("Could not access camera: " + error.message);
+        if (signatureStream) {
+            stopSignatureCamera();
+        }
+        
+        const facingMode = document.getElementById('signatureCameraSelect').value;
+        currentSignatureFacingMode = facingMode;
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { exact: facingMode } }
+            });
+            signatureStream = stream;
+            video.srcObject = stream;
+            await video.play();
+            container.style.display = 'block';
+        } catch (error) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode }
                 });
-        } else {
-            alert("Camera not supported in this browser");
+                signatureStream = stream;
+                video.srcObject = stream;
+                await video.play();
+                container.style.display = 'block';
+            } catch (fallbackError) {
+                alert("Could not access camera: " + fallbackError.message);
+            }
+        }
+    }
+    
+    async function switchSignatureCamera() {
+        const select = document.getElementById('signatureCameraSelect');
+        const newFacingMode = select.value;
+        if (newFacingMode !== currentSignatureFacingMode) {
+            await startSignatureCamera();
         }
     }
     
@@ -364,13 +451,11 @@
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
             
-            // Drawing events
             signatureCanvas.addEventListener('mousedown', startDrawing);
             signatureCanvas.addEventListener('mousemove', draw);
             signatureCanvas.addEventListener('mouseup', stopDrawing);
             signatureCanvas.addEventListener('mouseleave', stopDrawing);
             
-            // Touch events for mobile
             signatureCanvas.addEventListener('touchstart', startDrawingTouch);
             signatureCanvas.addEventListener('touchmove', drawTouch);
             signatureCanvas.addEventListener('touchend', stopDrawing);
@@ -450,21 +535,16 @@
     document.getElementById('photoUpload').addEventListener('change', function(e) {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            
-            // Validate file size (5MB max)
             if (file.size > 5 * 1024 * 1024) {
                 alert("File size too large! Maximum 5MB allowed.");
                 this.value = '';
                 return;
             }
-            
             const reader = new FileReader();
             reader.onload = function(event) {
                 const preview = document.getElementById('photoPreview');
                 preview.src = event.target.result;
                 document.getElementById('photoPreviewSection').style.display = 'block';
-                
-                // Also store as data URL
                 document.getElementById('photoData').value = event.target.result;
             };
             reader.readAsDataURL(file);
@@ -474,28 +554,23 @@
     document.getElementById('signatureUpload').addEventListener('change', function(e) {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            
-            // Validate file size (2MB max)
             if (file.size > 2 * 1024 * 1024) {
                 alert("File size too large! Maximum 2MB allowed.");
                 this.value = '';
                 return;
             }
-            
             const reader = new FileReader();
             reader.onload = function(event) {
                 const preview = document.getElementById('signaturePreview');
                 preview.src = event.target.result;
                 document.getElementById('signaturePreviewSection').style.display = 'block';
-                
-                // Also store as data URL
                 document.getElementById('signatureData').value = event.target.result;
             };
             reader.readAsDataURL(file);
         }
     });
     
-    // Form validation before submission
+    // Form validation
     document.getElementById('registrationForm').addEventListener('submit', function(e) {
         const fullName = document.querySelector('[name="full_name"]').value;
         const email = document.querySelector('[name="email"]').value;
@@ -507,7 +582,6 @@
             return false;
         }
         
-        // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             e.preventDefault();
@@ -515,31 +589,10 @@
             return false;
         }
         
-        // Phone validation (basic)
         if (phone.length < 10) {
             e.preventDefault();
             alert("Please enter a valid phone number!");
             return false;
-        }
-        
-        const photoData = document.getElementById('photoData').value;
-        const signatureData = document.getElementById('signatureData').value;
-        
-        if (photoData && photoData.startsWith('data:image')) {
-            // Convert data URL to Blob and append to form
-            const blob = dataURLToBlob(photoData);
-            const file = new File([blob], "camera_photo.png", { type: "image/png" });
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            document.getElementById('photoUpload').files = dataTransfer.files;
-        }
-        
-        if (signatureData && signatureData.startsWith('data:image')) {
-            const blob = dataURLToBlob(signatureData);
-            const file = new File([blob], "captured_signature.png", { type: "image/png" });
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            document.getElementById('signatureUpload').files = dataTransfer.files;
         }
     });
     
@@ -549,11 +602,9 @@
         const raw = window.atob(parts[1]);
         const rawLength = raw.length;
         const uInt8Array = new Uint8Array(rawLength);
-        
         for (let i = 0; i < rawLength; ++i) {
             uInt8Array[i] = raw.charCodeAt(i);
         }
-        
         return new Blob([uInt8Array], { type: contentType });
     }
     

@@ -15,6 +15,7 @@ import tempfile
 import cloudinary
 import cloudinary.uploader
 from config import Config
+import requests
 
 # ==================== ENVIRONMENT DETECTION ====================
 # Set DISABLE_WHATSAPP=true and DISABLE_REMBG=true on Render only
@@ -566,12 +567,27 @@ def remove_single_background(id):
     if not staff.signature_path:
         return jsonify({'error': 'No signature found'}), 404
     
+    temp_file = None
     try:
-        sig_filename = os.path.basename(staff.signature_path)
-        sig_path = os.path.join(Config.STAFF_SIGNATURES_FOLDER, sig_filename)
+        # Determine the source file path
+        if staff.signature_path.startswith('http'):
+            # It's a Cloudinary URL - download it first
+            import requests
+            print(f"Downloading signature from Cloudinary: {staff.signature_path}")
+            response = requests.get(staff.signature_path)
+            temp_file = os.path.join('temp', f"temp_sig_{staff.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            with open(temp_file, 'wb') as f:
+                f.write(response.content)
+            sig_path = temp_file
+            print(f"✅ Downloaded to temp file: {temp_file}")
+        else:
+            # Local file path
+            sig_filename = os.path.basename(staff.signature_path)
+            sig_path = os.path.join(Config.STAFF_SIGNATURES_FOLDER, sig_filename)
+            print(f"Using local signature: {sig_path}")
         
         if os.path.exists(sig_path):
-            clean_filename = f"clean_{sig_filename}"
+            clean_filename = f"clean_{staff.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, clean_filename)
             
             success = remove_signature_background(sig_path, clean_path)
@@ -599,16 +615,27 @@ def remove_single_background(id):
                     print("ℹ️ Cloudinary not configured - saving locally only")
                 
                 db.session.commit()
+                
+                # Clean up temp file if it was created
+                if temp_file and os.path.exists(temp_file):
+                    os.remove(temp_file)
+                    print(f"🧹 Cleaned up temp file: {temp_file}")
+                
                 return jsonify({'success': True, 'message': 'Background removed successfully!'})
             else:
                 return jsonify({'error': 'Background removal failed'}), 500
         else:
-            return jsonify({'error': 'Signature file not found'}), 404
+            return jsonify({'error': f'Signature file not found at: {sig_path}'}), 404
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/admin/bulk-remove-bg', methods=['POST'])
+        print(f"Error in remove_single_background: {e}")
+        # Clean up temp file if it exists
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+        return jsonify({'error': str(e)}), 500@app.route('/admin/bulk-remove-bg', methods=['POST'])
 @login_required
 def bulk_remove_backgrounds():
     """Remove backgrounds for signatures based on current filters"""
