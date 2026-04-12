@@ -1251,6 +1251,83 @@ def staff_dashboard():
     
     return render_template('staff_dashboard.html', staff=current_user)
 
+@app.route('/migrate-to-cloudinary')
+@login_required
+def migrate_to_cloudinary():
+    """Temporary route to migrate existing images to Cloudinary"""
+    if session.get('user_role') != 'super_admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    from config import Config
+    import cloudinary.uploader
+    import os
+    
+    cloudinary.config(
+        cloud_name=Config.CLOUDINARY_CLOUD_NAME,
+        api_key=Config.CLOUDINARY_API_KEY,
+        api_secret=Config.CLOUDINARY_API_SECRET
+    )
+    
+    staff_members = Staff.query.all()
+    results = []
+    
+    for staff in staff_members:
+        result = {
+            'name': staff.full_name, 
+            'id': staff.id,
+            'photo': False, 
+            'signature': False
+        }
+        
+        # Migrate photo
+        if staff.image_path and not staff.image_path.startswith('http'):
+            if os.path.exists(staff.image_path):
+                try:
+                    upload = cloudinary.uploader.upload(
+                        staff.image_path,
+                        folder="staff_photos",
+                        public_id=f"staff_{staff.id}_photo",
+                        overwrite=True
+                    )
+                    staff.image_path = upload['secure_url']
+                    result['photo'] = True
+                    result['photo_url'] = upload['secure_url']
+                except Exception as e:
+                    result['photo_error'] = str(e)
+            else:
+                result['photo_error'] = f"File not found: {staff.image_path}"
+        elif staff.image_path and staff.image_path.startswith('http'):
+            result['photo'] = 'already_cloud'
+        
+        # Migrate signature
+        if staff.signature_path and not staff.signature_path.startswith('http'):
+            if os.path.exists(staff.signature_path):
+                try:
+                    upload = cloudinary.uploader.upload(
+                        staff.signature_path,
+                        folder="staff_signatures",
+                        public_id=f"staff_{staff.id}_signature",
+                        overwrite=True
+                    )
+                    staff.signature_path = upload['secure_url']
+                    result['signature'] = True
+                    result['signature_url'] = upload['secure_url']
+                except Exception as e:
+                    result['signature_error'] = str(e)
+            else:
+                result['signature_error'] = f"File not found: {staff.signature_path}"
+        elif staff.signature_path and staff.signature_path.startswith('http'):
+            result['signature'] = 'already_cloud'
+        
+        results.append(result)
+    
+    db.session.commit()
+    return jsonify({
+        'success': True, 
+        'message': f'Processed {len(staff_members)} staff members',
+        'results': results
+    })
+
 # ==================== RUN APP ====================
 
 if __name__ == '__main__':
