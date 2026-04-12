@@ -19,3 +19,4 @@ qrcode==7.4.2
 pywhatkit==5.4
 opencv-python==4.8.1.78
 cloudinary==1.36.0
+gunicorn==21.2.0
