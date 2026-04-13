@@ -47,12 +47,34 @@
         padding: 10px;
         margin-top: 10px;
     }
+    .login-info {
+        background-color: #d1ecf1;
+        border-left: 4px solid #17a2b8;
+        padding: 15px;
+        margin-top: 20px;
+        border-radius: 5px;
+    }
+    .login-info ul {
+        margin-bottom: 0;
+        margin-top: 10px;
+    }
+    .login-info li {
+        margin-bottom: 5px;
+    }
     .password-note {
         background-color: #fff3cd;
         border-left: 4px solid #ffc107;
         padding: 10px;
         margin-top: 20px;
         border-radius: 5px;
+    }
+    .badge-cloud {
+        background-color: #17a2b8;
+        color: white;
+        font-size: 0.7rem;
+        margin-left: 5px;
+        padding: 2px 6px;
+        border-radius: 10px;
     }
 </style>
 {% endblock %}
@@ -69,8 +91,12 @@
                 
                 <div class="text-center">
                     {% if staff.image_path %}
-                    <img src="{{ url_for('uploaded_file', folder='staff_images', filename=staff.image_path.split('/')[-1]) }}" 
-                         class="profile-avatar">
+                        {% if staff.image_path.startswith('http') %}
+                            <img src="{{ staff.image_path }}" class="profile-avatar" alt="Profile Photo">
+                        {% else %}
+                            <img src="{{ url_for('uploaded_file', folder='staff_images', filename=staff.image_path.split('/')[-1]) }}" 
+                                 class="profile-avatar" alt="Profile Photo">
+                        {% endif %}
                     {% else %}
                     <div class="profile-avatar bg-secondary d-flex align-items-center justify-content-center mx-auto">
                         <i class="fas fa-user fa-4x text-white"></i>
@@ -107,27 +133,49 @@
                         </div>
                     </div>
                     
-                    <!-- Signature Section -->
+                    <!-- Signature Section with Cloudinary Support -->
                     <div class="mt-4">
                         <div class="info-label"><i class="fas fa-signature"></i> Signature</div>
                         <div class="info-value">
-                            {% if staff.signature_bg_removed_path %}
-                            <img src="{{ url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path) }}" 
-                                 class="signature-preview">
-                            <span class="badge bg-success">Clean Signature</span>
+                            {% if staff.signature_bg_removed_url %}
+                                <img src="{{ staff.signature_bg_removed_url }}" class="signature-preview" alt="Clean Signature">
+                                <span class="badge bg-success">✓ Clean Signature</span>
+                                <span class="badge-cloud">☁️ Cloud</span>
+                            {% elif staff.signature_bg_removed_path %}
+                                <img src="{{ url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path) }}" 
+                                     class="signature-preview" alt="Clean Signature">
+                                <span class="badge bg-success">Clean Signature</span>
                             {% elif staff.signature_path %}
-                            <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff.signature_path.split('/')[-1]) }}" 
-                                 class="signature-preview">
+                                {% if staff.signature_path.startswith('http') %}
+                                    <img src="{{ staff.signature_path }}" class="signature-preview" alt="Signature">
+                                {% else %}
+                                    <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff.signature_path.split('/')[-1]) }}" 
+                                         class="signature-preview" alt="Signature">
+                                {% endif %}
                             {% else %}
-                            <span class="text-muted">No signature uploaded</span>
+                                <span class="text-muted">No signature uploaded</span>
                             {% endif %}
                         </div>
+                    </div>
+                    
+                    <!-- Login Information Section -->
+                    <div class="login-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Login Information:</strong><br>
+                        You can login using any of the following credentials:
+                        <ul>
+                            <li><strong>Username:</strong> {% if staff.username %}{{ staff.username }}{% else %}Not set{% endif %}</li>
+                            <li><strong>Email:</strong> {{ staff.email }}</li>
+                            <li><strong>Phone Number:</strong> {{ staff.phone_number }}</li>
+                            <li><strong>Full Name:</strong> {{ staff.full_name }}</li>
+                        </ul>
+                        <small>Your current password is the one set by the administrator. You can also use your phone number as password.</small>
                     </div>
                     
                     <!-- Password Note -->
                     <div class="password-note">
                         <i class="fas fa-info-circle"></i> 
-                        <strong>Note:</strong> Use your username as your password and reset it on your Edocloud account, Please!
+                        <strong>Security Note:</strong> Use your username as your password and reset it on your Edocloud account. For security purposes, please change your password after first login.
                     </div>
                     
                     <hr>

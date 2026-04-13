@@ -79,4 +79,83 @@
         </div>
     </div>
 </div>
+
+<!-- Download Local Environment Section -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-download"></i> Downloads</h5>
+            </div>
+            <div class="card-body text-center">
+                <i class="fas fa-download fa-3x text-success mb-3"></i>
+                <h4>Local Environment Setup</h4>
+                <p class="text-muted">Download the complete Staff Management System for local installation and offline use.</p>
+                <button onclick="downloadLocalEnv()" class="btn btn-success btn-lg">
+                    <i class="fas fa-download"></i> Download Local Environment
+                </button>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        Includes: Flask application, templates, and all dependencies. 
+                        Requires Python 3.10+ and PostgreSQL setup.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function downloadLocalEnv() {
+    // Replace this URL with your actual download link when ready
+    const downloadUrl = "#";
+    
+    // Show notification if available
+    if (typeof showNotification === 'function') {
+        showNotification('Preparing download...', 'info');
+    }
+    
+    // Show info message with download instructions
+    const userConfirmed = confirm(
+        "The local environment download will be available soon.\n\n" +
+        "Please contact the system administrator to get the download link.\n\n" +
+        "Alternatively, you can clone the repository from:\n" +
+        "https://github.com/Franie83/smaf\n\n" +
+        "Click OK to visit the GitHub repository."
+    );
+    
+    if (userConfirmed) {
+        window.open('https://github.com/Franie83/smaf', '_blank');
+    }
+    
+    // Uncomment below when you have the actual download link
+    // window.open(downloadUrl, '_blank');
+}
+
+// Optional: Add hover effect to the download button
+document.addEventListener('DOMContentLoaded', function() {
+    const downloadBtn = document.querySelector('.btn-success.btn-lg');
+    if (downloadBtn) {
+        downloadBtn.addEventListener('mouseenter', function() {
+            this.style.transform = 'scale(1.02)';
+            this.style.transition = 'transform 0.2s';
+        });
+        downloadBtn.addEventListener('mouseleave', function() {
+            this.style.transform = 'scale(1)';
+        });
+    }
+});
+</script>
+
+<style>
+    .btn-success.btn-lg {
+        transition: transform 0.2s;
+        padding: 12px 30px;
+        font-size: 1.1rem;
+    }
+    .border-success {
+        border-width: 2px;
+    }
+</style>
 {% endblock %}

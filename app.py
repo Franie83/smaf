@@ -16,6 +16,8 @@ import cloudinary
 import cloudinary.uploader
 from config import Config
 import requests
+# Add this line with other imports
+import re
 
 
 # ==================== ENVIRONMENT DETECTION ====================
@@ -276,13 +278,15 @@ def index():
 @app.route('/staff-login', methods=['GET', 'POST'])
 def staff_login():
     if request.method == 'POST':
-        username = request.form.get('username')
+        login_input = request.form.get('username')
         password = request.form.get('password')
         
+        # Try to find by username, email, phone number, OR full name
         user = Staff.query.filter(
-            (Staff.email == username) | 
-            (Staff.username == username) | 
-            (Staff.phone_number == username)
+            (Staff.email == login_input) | 
+            (Staff.username == login_input) | 
+            (Staff.phone_number == login_input) |
+            (Staff.full_name == login_input)
         ).first()
         
         if user and user.check_password(password):
@@ -291,10 +295,9 @@ def staff_login():
             flash(f'Welcome {user.full_name}!', 'success')
             return redirect(url_for('staff_dashboard'))
         else:
-            flash('Invalid credentials. Please check your email/username and password.', 'danger')
+            flash('Invalid credentials. Please check your username/email/phone/full name and password.', 'danger')
     
     return render_template('staff_login.html')
-
 @app.route('/admin-login', methods=['GET', 'POST'])
 def admin_login():
     if request.method == 'POST':
@@ -323,6 +326,28 @@ def register():
         department = request.form.get('department')
         designation = request.form.get('designation')
         
+        # Check if email already exists
+        existing_staff = Staff.query.filter_by(email=email).first()
+        if existing_staff:
+            flash(f'Email {email} is already registered. Please use a different email.', 'danger')
+            return render_template('register.html')
+        
+        # Check if phone already exists
+        existing_phone = Staff.query.filter_by(phone_number=phone).first()
+        if existing_phone:
+            flash(f'Phone number {phone} is already registered. Please use a different number.', 'danger')
+            return render_template('register.html')
+        
+        # Auto-create username from full name (remove spaces, lowercase, remove special chars)
+        username = re.sub(r'[^a-zA-Z0-9_]', '_', full_name.lower().replace(' ', '_'))
+        
+        # Check if username already exists, append number if needed
+        base_username = username
+        counter = 1
+        while Staff.query.filter_by(username=username).first():
+            username = f"{base_username}{counter}"
+            counter += 1
+        
         image_url = None
         photo_data = request.form.get('photo_data')
         photo_file = request.files.get('photo')
@@ -344,7 +369,6 @@ def register():
                 return render_template('register.html')
         elif photo_data and photo_data.startswith('data:image'):
             try:
-                # Save temp file from camera capture
                 header, encoded = photo_data.split(',', 1)
                 image_bytes = base64.b64decode(encoded)
                 temp_path = os.path.join('temp', f"temp_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
@@ -402,14 +426,21 @@ def register():
                 ministry=ministry,
                 department=department,
                 designation=designation,
-                image_path=image_url,  # Now stores Cloudinary URL
-                signature_path=signature_url  # Now stores Cloudinary URL
+                image_path=image_url,
+                signature_path=signature_url,
+                username=username
             )
+            
+            # Set the auto-generated password (phone number)
+            staff.set_password(phone)
             
             db.session.add(staff)
             db.session.commit()
             
-            flash('Registration submitted successfully! Admin will set your credentials.', 'success')
+            flash(f'✅ Registration successful!', 'success')
+            flash(f'📝 Your username is: {username}', 'info')
+            flash(f'🔑 Your password is: {phone}', 'info')
+            flash(f'ℹ️ You can also login using your Full Name or Email as username, and Phone Number as password.', 'info')
             return redirect(url_for('staff_login'))
         else:
             flash('Please fill all required fields', 'danger')
