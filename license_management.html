@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}License Management{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-key"></i> License Management</h4>
+                    <small>Super Admin Only</small>
+                </div>
+                <div class="card-body">
+                    <!-- Current License Status -->
+                    <div class="alert {% if license.valid %}alert-success{% else %}alert-danger{% endif %}">
+                        <h5><i class="fas fa-info-circle"></i> Current License Status</h5>
+                        {% if license.valid %}
+                            <p><strong><i class="fas fa-user"></i> Customer:</strong> {{ license.customer_name }}</p>
+                            <p><strong><i class="fas fa-envelope"></i> Email:</strong> {{ license.email }}</p>
+                            <p><strong><i class="fas fa-calendar-alt"></i> Expiry Date:</strong> {{ license.expiry_date.strftime('%Y-%m-%d') }}</p>
+                            <p><strong><i class="fas fa-hourglass-half"></i> Days Remaining:</strong> 
+                                <span class="{% if license.days_remaining < 7 %}text-danger{% elif license.days_remaining < 30 %}text-warning{% else %}text-success{% endif %}">
+                                    {{ license.days_remaining }} days
+                                </span>
+                            </p>
+                            <p><strong><i class="fas fa-users"></i> Max Users:</strong> {{ license.max_users }}</p>
+                            <p><strong><i class="fas fa-cogs"></i> Features:</strong> {{ license.features|join(', ') }}</p>
+                        {% else %}
+                            <p><strong>Status:</strong> ❌ Invalid / Not Activated</p>
+                            <p><strong>Error:</strong> {{ license.error }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Activate License (Super Admin only) -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0"><i class="fas fa-check-circle"></i> Activate License</h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('activate_license') }}">
+                                <div class="form-group mb-3">
+                                    <label>License Key</label>
+                                    <textarea name="license_key" class="form-control" rows="3" 
+                                              placeholder="Paste your license key here..." required></textarea>
+                                    <small class="text-muted">Enter the license key provided by your administrator</small>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-check"></i> Activate License
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <!-- Generate New License (Super Admin only) -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0"><i class="fas fa-key"></i> Generate New License</h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('generate_license') }}">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-group">
+                                            <label>Customer Name *</label>
+                                            <input type="text" name="customer_name" class="form-control" required>
+                                            <small class="text-muted">Name of the customer/organization</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-group">
+                                            <label>Email *</label>
+                                            <input type="email" name="email" class="form-control" required>
+                                            <small class="text-muted">Customer's email address</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-group">
+                                            <label>Expiry Days</label>
+                                            <input type="number" name="expiry_days" class="form-control" value="30" required>
+                                            <small class="text-muted">30 days = 1 month, 365 days = 1 year</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-group">
+                                            <label>Max Users</label>
+                                            <input type="number" name="max_users" class="form-control" value="5" required>
+                                            <small class="text-muted">Maximum number of staff users allowed</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-key"></i> Generate License
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <!-- Create Trial License (Super Admin only) -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-warning text-white">
+                            <h5 class="mb-0"><i class="fas fa-flask"></i> Create Trial License</h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('create_trial') }}">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-group">
+                                            <label>Trial Days</label>
+                                            <input type="number" name="days" class="form-control" value="30" required>
+                                            <small class="text-muted">Default: 30-day trial period</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="fas fa-flask"></i> Create Trial License
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <!-- Help Section -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="fas fa-question-circle"></i> License Help</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-info-circle text-primary"></i> <strong>How to generate a license:</strong> Fill in customer details and click "Generate License"</li>
+                                <li><i class="fas fa-info-circle text-primary"></i> <strong>How to activate:</strong> Copy the generated license key and paste it in the "Activate License" section</li>
+                                <li><i class="fas fa-info-circle text-primary"></i> <strong>Trial License:</strong> Creates a 30-day trial for testing purposes</li>
+                                <li><i class="fas fa-info-circle text-primary"></i> <strong>License File:</strong> The license is saved as 'license.lic' in the application directory</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

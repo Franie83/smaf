@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Manage MDA Options{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Manage MDAs (Ministries, Departments & Agencies)</h2>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Add New MDA</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_mda_option') }}">
+                    <div class="mb-3">
+                        <label for="mda_name" class="form-label">MDA Name</label>
+                        <input type="text" class="form-control" id="mda_name" name="mda_name" required>
+                        <small class="text-muted">Example: Ministry of Health, Edo State Internal Revenue Service, etc.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add MDA
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Existing MDAs</h5>
+            </div>
+            <div class="card-body">
+                {% if mda_list %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>S/N</th>
+                                <th>MDA Name</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for mda in mda_list %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ mda.name }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteMDA('{{ mda.name }}')">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    No MDAs found. Use the form to add your first MDA.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function deleteMDA(mdaName) {
+    if(confirm(`Are you sure you want to delete "${mdaName}"? This will only work if no staff or admins are assigned to this MDA.`)) {
+        fetch(`/admin/delete-mda/${encodeURIComponent(mdaName)}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }).then(response => {
+            window.location.reload();
+        }).catch(error => {
+            console.error('Error:', error);
+            window.location.reload();
+        });
+    }
+}
+</script>
+{% endblock %}

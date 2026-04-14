@@ -30,3 +30,8 @@ temp/
 .idea/"__pycache__/" 
 "build/" 
 "*.pyc" 
+"__pycache__/" 
+"*.pyc" 
+"build/" 
+"*.pdf" 
+"*.jpeg" 

@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}Admin - Staff Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-section {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    .staff-table th {
+        background-color: #343a40;
+        color: white;
+    }
+    .badge-mda {
+        background-color: #17a2b8;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+    }
+    .action-buttons .btn {
+        margin: 2px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">
+        <i class="fas fa-users"></i> Staff Members
+        {% if admin_mda %}
+        <small class="text-muted">- Filtered by: {{ admin_mda }}</small>
+        {% endif %}
+    </h2>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" id="searchInput" class="form-control" placeholder="Search by name, email, or phone...">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select id="mdaFilter" class="form-select">
+                    <option value="">All MDAs</option>
+                    {% for mda in mda_options %}
+                    <option value="{{ mda }}">{{ mda }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-secondary w-100" onclick="clearFilters()">
+                    <i class="fas fa-eraser"></i> Clear Filters
+                </button>
+            </div>
+            <div class="col-md-3 text-end">
+                <span class="badge bg-info p-2">
+                    <i class="fas fa-chart-line"></i> Total: <span id="totalCount">{{ staff|length }}</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Staff Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover staff-table" id="staffTable">
+                    <thead>
+                        <tr>
+                            <th>Photo</th>
+                            <th>Clean Signature</th>
+                            <th>Full Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>MDA</th>
+                            <th>Department</th>
+                            <th>Designation</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for staff_member in staff %}
+                        <tr class="staff-row" 
+                            data-name="{{ staff_member.full_name|lower }}"
+                            data-email="{{ staff_member.email|lower }}"
+                            data-phone="{{ staff_member.phone_number or ''|lower }}"
+                            data-mda="{{ staff_member.mda or '' }}">
+                            <td>
+                                {% if staff_member.image_path %}
+                                <img src="{{ staff_member.image_path }}" 
+                                     class="rounded-circle" 
+                                     alt="Photo" 
+                                     style="width: 50px; height: 50px; object-fit: cover;">
+                                {% else %}
+                                <i class="fas fa-user-circle fa-2x text-secondary"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if staff_member.signature_bg_removed_url or staff_member.signature_bg_removed_path %}
+                                <i class="fas fa-check-circle text-success"></i> Clean Signature
+                                {% if staff_member.signature_bg_removed_url %}
+                                <i class="fas fa-cloud text-info" title="Stored in Cloud"></i>
+                                {% endif %}
+                                {% elif staff_member.signature_path %}
+                                <i class="fas fa-check-circle text-warning"></i> Has Signature
+                                {% else %}
+                                <span class="text-muted">No signature</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ staff_member.full_name }}</strong><br>
+                                <small class="text-muted">{{ staff_member.username or 'No username' }}</small>
+                            </td>
+                            <td>{{ staff_member.email }}</td>
+                            <td>{{ staff_member.phone_number or 'N/A' }}</td>
+                            <td>
+                                {% if staff_member.mda %}
+                                <span class="badge-mda">{{ staff_member.mda }}</span>
+                                {% else %}
+                                <span class="text-muted">Not specified</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ staff_member.department or 'N/A' }}</td>
+                            <td>{{ staff_member.designation or 'N/A' }}</td>
+                            <td class="action-buttons">
+                                <button class="btn btn-sm btn-info" onclick="viewStaff({{ staff_member.id }})" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-warning" onclick="editStaff({{ staff_member.id }})" title="Edit Staff">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-success" onclick="viewSignature({{ staff_member.id }})" title="View Signature">
+                                    <i class="fas fa-signature"></i>
+                                </button>
+                                {% if session.user_role == 'super_admin' %}
+                                <button class="btn btn-sm btn-danger" onclick="deleteStaff({{ staff_member.id }})" title="Delete Staff">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Staff Modal -->
+<div class="modal fade" id="viewStaffModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-user-circle"></i> Staff Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="viewStaffContent">
+                <!-- Content loaded via AJAX -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Signature Modal -->
+<div class="modal fade" id="signatureModal" tabindex="-1">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-signature"></i> Staff Signature</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center" id="signatureContent">
+                <!-- Signature image loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Filter functions
+function filterTable() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const mdaFilter = document.getElementById('mdaFilter').value;
+    const rows = document.querySelectorAll('.staff-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        const name = row.getAttribute('data-name');
+        const email = row.getAttribute('data-email');
+        const phone = row.getAttribute('data-phone');
+        const mda = row.getAttribute('data-mda');
+        
+        let matchesSearch = !searchTerm || 
+            name.includes(searchTerm) || 
+            email.includes(searchTerm) || 
+            phone.includes(searchTerm);
+        
+        let matchesMDA = !mdaFilter || mda === mdaFilter;
+        
+        if (matchesSearch && matchesMDA) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    document.getElementById('totalCount').textContent = visibleCount;
+}
+
+function clearFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('mdaFilter').value = '';
+    filterTable();
+}
+
+// Action functions
+function viewStaff(id) {
+    fetch(`/admin/staff/view/${id}`)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('viewStaffContent').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('viewStaffModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Could not load staff details');
+        });
+}
+
+function editStaff(id) {
+    window.location.href = `/admin/staff/edit/${id}`;
+}
+
+function viewSignature(id) {
+    fetch(`/admin/staff/signature/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.signature_url) {
+                document.getElementById('signatureContent').innerHTML = `
+                    <img src="${data.signature_url}" class="img-fluid" alt="Signature" style="max-height: 300px;">
+                    <p class="mt-3">
+                        <strong>Staff:</strong> ${data.full_name}<br>
+                        <strong>MDA:</strong> ${data.mda || 'Not specified'}
+                    </p>
+                    ${data.has_clean_signature ? '<span class="badge bg-success"><i class="fas fa-check"></i> Has Clean Signature</span>' : ''}
+                `;
+            } else {
+                document.getElementById('signatureContent').innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> No signature available for this staff member.
+                    </div>
+                `;
+            }
+            new bootstrap.Modal(document.getElementById('signatureModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Could not load signature');
+        });
+}
+
+function deleteStaff(id) {
+    if(confirm('Are you sure you want to delete this staff member? This action cannot be undone!')) {
+        fetch(`/admin/staff/delete/${id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.success) {
+                alert('Staff member deleted successfully');
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Could not delete staff member'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Could not delete staff member');
+        });
+    }
+}
+
+// Event listeners
+document.getElementById('searchInput').addEventListener('keyup', filterTable);
+document.getElementById('mdaFilter').addEventListener('change', filterTable);
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    filterTable();
+});
+</script>
+{% endblock %}
