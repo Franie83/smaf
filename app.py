@@ -32,6 +32,12 @@ else:
     template_dir = os.path.join(base_path, 'templates')
     static_dir = os.path.join(base_path, 'static')
 
+# ==================== ENVIRONMENT DETECTION FOR LICENSE ====================
+# Check if running on Render or cloud platform
+DISABLE_LICENSE = os.environ.get('DISABLE_LICENSE', 'False').lower() == 'true'
+IS_RENDER = os.environ.get('RENDER', 'False').lower() == 'true'
+IS_CLOUD = DISABLE_LICENSE or IS_RENDER
+
 # ==================== LICENSE MANAGER ====================
 import hashlib
 import json
@@ -77,6 +83,10 @@ class LicenseManager:
     
     def validate_license(self):
         """Validate the license and return status"""
+        # Skip license check on cloud platforms
+        if IS_CLOUD:
+            return {'valid': True, 'max_users': 9999, 'days_remaining': 365}
+        
         if not os.path.exists(self.license_file):
             return {'valid': False, 'error': 'License file not found', 'code': 'NO_LICENSE'}
         try:
@@ -127,6 +137,10 @@ def license_required(f):
     """Decorator to check license before accessing routes"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Skip license check on cloud platforms
+        if IS_CLOUD:
+            return f(*args, **kwargs)
+        
         result = license_manager.validate_license()
         if not result['valid']:
             return redirect(url_for('activation_page'))
@@ -234,6 +248,11 @@ def save_image_from_data_url(data_url, folder, filename):
 @app.route('/activate', methods=['GET', 'POST'])
 def activation_page():
     """License activation page - accessible without login"""
+    # Skip on cloud
+    if IS_CLOUD:
+        flash('License system is disabled in cloud environment', 'info')
+        return redirect(url_for('staff_login'))
+    
     result = license_manager.validate_license()
     if result['valid']:
         flash('License is already active and valid!', 'success')
@@ -468,6 +487,10 @@ def uploaded_file(folder, filename):
 
 @app.route('/')
 def index():
+    # Skip license check on cloud platforms
+    if IS_CLOUD:
+        return render_template('index.html')
+    
     result = license_manager.validate_license()
     if not result['valid']:
         return redirect(url_for('activation_page'))
@@ -477,9 +500,11 @@ def index():
 
 @app.route('/staff-login', methods=['GET', 'POST'])
 def staff_login():
-    result = license_manager.validate_license()
-    if not result['valid']:
-        return redirect(url_for('activation_page'))
+    # Skip license check on cloud platforms
+    if not IS_CLOUD:
+        result = license_manager.validate_license()
+        if not result['valid']:
+            return redirect(url_for('activation_page'))
     
     if request.method == 'POST':
         login_input = request.form.get('username')
@@ -501,9 +526,11 @@ def staff_login():
 
 @app.route('/admin-login', methods=['GET', 'POST'])
 def admin_login():
-    result = license_manager.validate_license()
-    if not result['valid']:
-        return redirect(url_for('activation_page'))
+    # Skip license check on cloud platforms
+    if not IS_CLOUD:
+        result = license_manager.validate_license()
+        if not result['valid']:
+            return redirect(url_for('activation_page'))
     
     if request.method == 'POST':
         username = request.form.get('username')
@@ -521,9 +548,11 @@ def admin_login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    result = license_manager.validate_license()
-    if not result['valid']:
-        return redirect(url_for('activation_page'))
+    # Skip license check on cloud platforms
+    if not IS_CLOUD:
+        result = license_manager.validate_license()
+        if not result['valid']:
+            return redirect(url_for('activation_page'))
     
     if request.method == 'POST':
         full_name = request.form.get('full_name')
@@ -538,8 +567,8 @@ def register():
             flash('Please fill in all required fields: Full Name, Email, Phone Number, and MDA!', 'danger')
             return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
         
-        # Check license user limit
-        if result['valid']:
+        # Check license user limit (skip on cloud)
+        if not IS_CLOUD and result['valid']:
             current_users = Staff.query.count()
             if current_users >= result['max_users']:
                 flash(f'Maximum user limit ({result["max_users"]}) reached. Please upgrade your license.', 'danger')
@@ -1306,7 +1335,7 @@ def edit_staff(id):
         designation = request.form.get('designation')
         new_password = request.form.get('password')
         mda = request.form.get('mda')
-        ed_password = request.form.get('ed_password')  # Plain text ED password
+        ed_password = request.form.get('ed_password')
         
         if username == '':
             username = None
@@ -1325,13 +1354,12 @@ def edit_staff(id):
         if new_password and new_password.strip():
             staff.set_password(new_password.strip())
         
-        # Update ED password (stores both hashed and plain text)
+        # Update ED password
         if ed_password is not None:
             if ed_password.strip():
                 staff.set_ed_password(ed_password.strip())
                 flash('ED password updated successfully!', 'success')
             else:
-                # Clear the ED password if field is empty
                 staff.set_ed_password(None)
                 flash('ED password cleared!', 'info')
         
@@ -1374,6 +1402,7 @@ def edit_staff(id):
             flash(f'Error updating staff: {str(e)}', 'danger')
             return render_template('edit_staff.html', staff=staff)
     return render_template('edit_staff.html', staff=staff)
+
 @app.route('/admin/staff/delete/<int:id>')
 @login_required
 def delete_staff(id):
