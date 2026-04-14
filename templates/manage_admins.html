@@ -32,8 +32,18 @@
                 </div>
             </div>
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-6 mb-3">
                     <input type="password" name="password" class="form-control" placeholder="Password" required>
+                </div>
+                <!-- NEW: MDA Field for Admin -->
+                <div class="col-md-6 mb-3">
+                    <select name="mda" class="form-select">
+                        <option value="">All MDAs (No restriction)</option>
+                        {% for mda in mda_options %}
+                        <option value="{{ mda.name }}">{{ mda.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">If selected, this admin will only see staff from this MDA</small>
                 </div>
             </div>
         </form>
@@ -53,6 +63,7 @@
                         <th>Full Name</th>
                         <th>Email</th>
                         <th>Role</th>
+                        <th>MDA Restriction</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -68,7 +79,14 @@
                             {% else %}
                                 <span class="badge bg-info">Admin</span>
                             {% endif %}
-                        </td>
+                         </td>
+                        <td>
+                            {% if admin.mda %}
+                                <span class="badge bg-secondary">{{ admin.mda }}</span>
+                            {% else %}
+                                <span class="text-muted">All MDAs</span>
+                            {% endif %}
+                         </td>
                         <td>
                             <button class="btn btn-sm btn-warning" onclick="resetPassword({{ admin.id }})">
                                 Reset Password
@@ -78,8 +96,8 @@
                                 Delete
                             </button>
                             {% endif %}
-                        </td>
-                    </tr>
+                         </td>
+                     </tr>
                     {% endfor %}
                 </tbody>
             </table>

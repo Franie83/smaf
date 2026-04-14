@@ -1,7 +1,25 @@
 import os
+import sys
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
+
+def get_base_path():
+    """Get correct base path whether running as script or compiled EXE"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled EXE
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as normal Python script
+        return os.path.dirname(os.path.abspath(__file__))
+
+def get_uploads_path():
+    """Get uploads folder path (creates if doesn't exist)"""
+    base_path = get_base_path()
+    uploads_path = os.path.join(base_path, 'uploads')
+    os.makedirs(uploads_path, exist_ok=True)
+    return uploads_path
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
@@ -18,8 +36,9 @@ class Config:
         # For local development with Neon
         SQLALCHEMY_DATABASE_URI = NEON_DATABASE_URL
     else:
-        # Fallback to SQLite for testing
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///staff_management.db'
+        # Fallback to SQLite for testing (store in executable directory)
+        base_path = get_base_path()
+        SQLALCHEMY_DATABASE_URI = f'sqlite:///{os.path.join(base_path, "staff_management.db")}'
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -30,13 +49,20 @@ class Config:
         'pool_pre_ping': True,
     }
     
-    UPLOAD_FOLDER = 'uploads'
+    # Upload folders - dynamic path for EXE compatibility
+    BASE_DIR = get_base_path()
+    UPLOAD_FOLDER = get_uploads_path()
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB max file size
     
-    # Folder paths
+    # Folder paths (absolute paths for reliability)
     STAFF_IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'staff_images')
     STAFF_SIGNATURES_FOLDER = os.path.join(UPLOAD_FOLDER, 'staff_signatures')
     CLEAN_SIGNATURES_FOLDER = os.path.join(UPLOAD_FOLDER, 'staff_signatures_clean')
+    
+    # Create all necessary folders
+    os.makedirs(STAFF_IMAGES_FOLDER, exist_ok=True)
+    os.makedirs(STAFF_SIGNATURES_FOLDER, exist_ok=True)
+    os.makedirs(CLEAN_SIGNATURES_FOLDER, exist_ok=True)
     
     # Static URL paths for serving files
     STAFF_IMAGES_URL = '/uploads/staff_images'
@@ -51,3 +77,17 @@ class Config:
     CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME')
     CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY')
     CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET')
+    
+    # ==================== EXE COMPATIBILITY SETTINGS ====================
+    # Whether running as compiled executable
+    IS_COMPILED = getattr(sys, 'frozen', False)
+    
+    # For debugging - print paths on startup (optional)
+    @classmethod
+    def print_paths(cls):
+        """Print configuration paths for debugging"""
+        print(f"Base directory: {cls.BASE_DIR}")
+        print(f"Upload folder: {cls.UPLOAD_FOLDER}")
+        print(f"Database URL: {cls.SQLALCHEMY_DATABASE_URI[:50]}...")
+        print(f"Running as EXE: {cls.IS_COMPILED}")
+        print(f"Cloudinary configured: {bool(cls.CLOUDINARY_CLOUD_NAME)}")

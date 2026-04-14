@@ -27,4 +27,6 @@ temp/
 
 # IDE files
 .vscode/ 
-.idea/
+.idea/"__pycache__/" 
+"build/" 
+"*.pyc" 

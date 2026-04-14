@@ -64,6 +64,13 @@
         content: " *";
         color: red;
     }
+    .add-mda-btn {
+        cursor: pointer;
+        color: #007bff;
+    }
+    .add-mda-btn:hover {
+        text-decoration: underline;
+    }
 </style>
 {% endblock %}
 
@@ -90,10 +97,6 @@
                             <input type="text" name="phone" class="form-control" required>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Ministry</label>
-                            <input type="text" name="ministry" class="form-control">
-                        </div>
-                        <div class="col-md-6 mb-3">
                             <label class="form-label">Department</label>
                             <input type="text" name="department" class="form-control">
                         </div>
@@ -101,6 +104,38 @@
                             <label class="form-label">Designation</label>
                             <input type="text" name="designation" class="form-control">
                         </div>
+                        
+                        <!-- MDA Field (Ministry/Department/Agency) -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required-field">MDA (Ministry/Department/Agency)</label>
+                            <div class="input-group">
+                                <select name="mda" class="form-control" id="mdaSelect" required>
+                                    <option value="">Select MDA</option>
+                                    {% for mda in mda_options %}
+                                    <option value="{{ mda.name }}">{{ mda.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline-secondary" onclick="showNewMDAInput()">
+                                    <i class="fas fa-plus"></i> New
+                                </button>
+                            </div>
+                            <div id="newMDAInputGroup" style="display: none; margin-top: 10px;">
+                                <div class="input-group">
+                                    <input type="text" id="newMDAInput" class="form-control" placeholder="Enter new MDA name">
+                                    <button type="button" class="btn btn-success" onclick="addNewMDA()">
+                                        <i class="fas fa-check"></i> Add
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="hideNewMDAInput()">
+                                        <i class="fas fa-times"></i> Cancel
+                                    </button>
+                                </div>
+                            </div>
+                            <small class="text-muted">Select your MDA or click "New" to add if not listed</small>
+                        </div>
+                        
+                        <!-- REMOVED: Ministry field -->
+                        <!-- REMOVED: ED Password field (hidden) -->
+                        
                     </div>
                     
                     <hr>
@@ -269,11 +304,37 @@
 </div>
 
 <script>
+    // MDA Functions
+    function showNewMDAInput() {
+        document.getElementById('newMDAInputGroup').style.display = 'block';
+        document.getElementById('newMDAInput').focus();
+    }
+    
+    function hideNewMDAInput() {
+        document.getElementById('newMDAInputGroup').style.display = 'none';
+        document.getElementById('newMDAInput').value = '';
+    }
+    
+    function addNewMDA() {
+        const newMDA = document.getElementById('newMDAInput').value.trim();
+        if (newMDA) {
+            const select = document.getElementById('mdaSelect');
+            const option = document.createElement('option');
+            option.value = newMDA;
+            option.text = newMDA;
+            select.add(option);
+            select.value = newMDA;
+            hideNewMDAInput();
+        } else {
+            alert('Please enter an MDA name');
+        }
+    }
+    
     // Photo Camera Variables
     let photoStream = null;
     let photoVideo = null;
     let photoCanvas = null;
-    let currentPhotoFacingMode = 'environment'; // 'environment' (back) or 'user' (front)
+    let currentPhotoFacingMode = 'environment';
     
     // Signature Camera Variables
     let signatureStream = null;
@@ -290,7 +351,6 @@
         const container = document.getElementById('photoCameraContainer');
         const video = document.getElementById('photoVideo');
         
-        // Stop any existing stream
         if (photoStream) {
             stopPhotoCamera();
         }
@@ -307,7 +367,6 @@
             await video.play();
             container.style.display = 'block';
         } catch (error) {
-            // Fallback if exact facing mode fails
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: facingMode }
@@ -342,7 +401,6 @@
         const imageData = canvas.toDataURL('image/jpeg', 0.8);
         document.getElementById('photoData').value = imageData;
         
-        // Show preview
         const preview = document.getElementById('photoPreview');
         preview.src = imageData;
         document.getElementById('photoPreviewSection').style.display = 'block';
@@ -420,7 +478,6 @@
         const imageData = canvas.toDataURL('image/png');
         document.getElementById('signatureData').value = imageData;
         
-        // Show preview
         const preview = document.getElementById('signaturePreview');
         preview.src = imageData;
         document.getElementById('signaturePreviewSection').style.display = 'block';
@@ -575,10 +632,11 @@
         const fullName = document.querySelector('[name="full_name"]').value;
         const email = document.querySelector('[name="email"]').value;
         const phone = document.querySelector('[name="phone"]').value;
+        const mda = document.querySelector('[name="mda"]').value;
         
-        if (!fullName || !email || !phone) {
+        if (!fullName || !email || !phone || !mda) {
             e.preventDefault();
-            alert("Please fill in all required fields!");
+            alert("Please fill in all required fields (Full Name, Email, Phone Number, and MDA)!");
             return false;
         }
         

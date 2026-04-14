@@ -34,7 +34,7 @@
         margin-top: 10px;
         text-align: center;
     }
-    .staff-ministry {
+    .staff-mda {
         font-size: 0.9rem;
         color: #666;
         text-align: center;
@@ -56,6 +56,13 @@
         color: white;
         font-size: 0.7rem;
         margin-left: 5px;
+    }
+    .badge-mda {
+        background-color: #6c757d;
+        color: white;
+        font-size: 0.7rem;
+        padding: 3px 8px;
+        border-radius: 15px;
     }
     .modal-body .staff-detail {
         margin-bottom: 15px;
@@ -176,10 +183,11 @@
                                onkeyup="filterStaff()">
                     </div>
                     <div class="col-md-3">
-                        <select id="ministryFilter" class="form-control" onchange="filterStaff()">
-                            <option value="">All Ministries</option>
-                            {% for ministry in ministries %}
-                            <option value="{{ ministry }}">{{ ministry }}</option>
+                        <!-- MDA Filter - Using mdas from distinct staff records -->
+                        <select id="mdaFilter" class="form-control" onchange="filterStaff()">
+                            <option value="">All MDAs</option>
+                            {% for mda in mdas %}
+                            <option value="{{ mda }}">{{ mda }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -195,44 +203,60 @@
                 <div class="card staff-card" data-name="{{ staff_member.full_name|lower }}" 
                      data-email="{{ staff_member.email|lower }}"
                      data-phone="{{ staff_member.phone_number }}"
-                     data-ministry="{{ staff_member.ministry or '' }}" 
+                     data-mda="{{ staff_member.mda or '' }}" 
                      data-id="{{ staff_member.id }}">
                     <div class="card-body text-center">
                         <!-- Photo -->
-                        <!-- Photo -->
-<div>
-    {% if staff_member.image_path %}
-        {% if staff_member.image_path.startswith('http') %}
-            <img src="{{ staff_member.image_path }}" class="staff-avatar" alt="Staff Photo">
-        {% else %}
-            <img src="{{ url_for('uploaded_file', folder='staff_images', filename=staff_member.image_path.split('/')[-1]) }}" 
-                 class="staff-avatar">
-        {% endif %}
-    {% else %}
-        <div class="staff-avatar bg-secondary d-flex align-items-center justify-content-center">
-            <i class="fas fa-user fa-3x text-white"></i>
-        </div>
-    {% endif %}
-</div>
-
-                            <!-- Signature Preview -->
-                            <div class="mt-2">
-                                {% if staff_member.signature_bg_removed_url %}
-                                    <img src="{{ staff_member.signature_bg_removed_url }}" 
-                                        class="signature-preview" alt="Clean Signature">
-                                    <br><span class="badge badge-clean">✓ Clean Signature</span>
-                                    <span class="badge badge-cloud">☁️ Cloud</span>
-                                {% elif staff_member.signature_path %}
-                                    {% if staff_member.signature_path.startswith('http') %}
-                                        <img src="{{ staff_member.signature_path }}" class="signature-preview" alt="Signature">
-                                    {% else %}
-                                        <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff_member.signature_path.split('/')[-1]) }}" 
-                                            class="signature-preview" alt="Signature">
-                                    {% endif %}
+                        <div>
+                            {% if staff_member.image_path %}
+                                {% if staff_member.image_path.startswith('http') %}
+                                    <img src="{{ staff_member.image_path }}" class="staff-avatar" alt="Staff Photo" 
+                                         onerror="this.onerror=null; this.src='{{ url_for('static', filename='default-avatar.png') }}';">
                                 {% else %}
-                                    <span class="text-muted small">No signature</span>
+                                    <img src="{{ url_for('uploaded_file', folder='staff_images', filename=staff_member.image_path.split('/')[-1]) }}" 
+                                         class="staff-avatar" alt="Staff Photo"
+                                         onerror="this.onerror=null; this.src='{{ url_for('static', filename='default-avatar.png') }}';">
                                 {% endif %}
-                            </div>                        
+                            {% else %}
+                                <div class="staff-avatar bg-secondary d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-user fa-3x text-white"></i>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Staff Name -->
+                        <div class="staff-name mt-2">
+                            {{ staff_member.full_name }}
+                            {% if staff_member.mda %}
+                            <span class="badge-mda">
+                                <i class="fas fa-building"></i> {{ staff_member.mda|truncate(20) }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Signature Preview -->
+                        <div class="mt-2">
+                            {% if staff_member.signature_bg_removed_url %}
+                                <img src="{{ staff_member.signature_bg_removed_url }}" 
+                                    class="signature-preview" alt="Clean Signature"
+                                    onerror="this.style.display='none'">
+                                <br><span class="badge badge-clean">✓ Clean Signature</span>
+                                <span class="badge badge-cloud">☁️ Cloud</span>
+                            {% elif staff_member.signature_path %}
+                                {% if staff_member.signature_path.startswith('http') %}
+                                    <img src="{{ staff_member.signature_path }}" class="signature-preview" alt="Signature"
+                                         onerror="this.style.display='none'">
+                                {% else %}
+                                    <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff_member.signature_path.split('/')[-1]) }}" 
+                                        class="signature-preview" alt="Signature"
+                                        onerror="this.style.display='none'">
+                                {% endif %}
+                                <br><span class="text-muted small">Has Signature</span>
+                            {% else %}
+                                <span class="text-muted small">No signature</span>
+                            {% endif %}
+                        </div>                        
+                        
                         <!-- Action Buttons -->
                         <div class="action-buttons">
                             <button class="btn btn-info btn-sm" onclick="viewDetails({{ staff_member.id }})">
@@ -342,7 +366,7 @@
     // Filter staff members
     function filterStaff() {
         const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        const ministryFilter = document.getElementById('ministryFilter').value.toLowerCase();
+        const mdaFilter = document.getElementById('mdaFilter').value;
         const cards = document.querySelectorAll('.staff-card');
         let visibleCount = 0;
         
@@ -350,15 +374,15 @@
             const name = card.getAttribute('data-name');
             const email = card.getAttribute('data-email');
             const phone = card.getAttribute('data-phone');
-            const ministry = card.getAttribute('data-ministry').toLowerCase();
+            const mda = card.getAttribute('data-mda');
             
             const matchesSearch = !searchTerm || 
                 name.includes(searchTerm) || 
                 email.includes(searchTerm) || 
                 phone.includes(searchTerm);
-            const matchesMinistry = !ministryFilter || ministry === ministryFilter;
+            const matchesMDA = !mdaFilter || mda === mdaFilter;
             
-            if (matchesSearch && matchesMinistry) {
+            if (matchesSearch && matchesMDA) {
                 card.style.display = '';
                 visibleCount++;
             } else {
@@ -372,12 +396,12 @@
     // Update filter info display
     function updateFilterInfo(visibleCount) {
         const searchTerm = document.getElementById('searchInput').value;
-        const ministryFilter = document.getElementById('ministryFilter').value;
+        const mdaFilter = document.getElementById('mdaFilter').value;
         const filterInfo = document.getElementById('filterInfo');
         
         let filters = [];
         if (searchTerm) filters.push(`Search: "${searchTerm}"`);
-        if (ministryFilter) filters.push(`Ministry: ${ministryFilter}`);
+        if (mdaFilter) filters.push(`MDA: ${mdaFilter}`);
         
         if (filters.length > 0) {
             filterInfo.innerHTML = `<i class="fas fa-filter"></i> Filters: ${filters.join(' | ')} | <strong>${visibleCount}</strong> staff member(s) visible`;
@@ -389,7 +413,7 @@
     // Download filtered results
     function downloadFiltered(type) {
         const searchTerm = document.getElementById('searchInput').value;
-        const ministryFilter = document.getElementById('ministryFilter').value;
+        const mdaFilter = document.getElementById('mdaFilter').value;
         
         let url = '';
         if (type === 'signatures') {
@@ -402,7 +426,7 @@
         
         const params = new URLSearchParams();
         if (searchTerm) params.append('search', searchTerm);
-        if (ministryFilter) params.append('ministry_filter', ministryFilter);
+        if (mdaFilter) params.append('mda_filter', mdaFilter);
         
         if (params.toString()) {
             url += '?' + params.toString();
@@ -465,10 +489,10 @@
     // Bulk remove backgrounds
     async function bulkRemoveBackgrounds() {
         const searchTerm = document.getElementById('searchInput').value;
-        const ministryFilter = document.getElementById('ministryFilter').value;
+        const mdaFilter = document.getElementById('mdaFilter').value;
         
         let filterMsg = '';
-        if (searchTerm || ministryFilter) {
+        if (searchTerm || mdaFilter) {
             filterMsg = ' matching current filters';
         }
         
@@ -487,7 +511,7 @@
         
         const params = new URLSearchParams();
         if (searchTerm) params.append('search', searchTerm);
-        if (ministryFilter) params.append('ministry_filter', ministryFilter);
+        if (mdaFilter) params.append('mda_filter', mdaFilter);
         
         try {
             const response = await fetch(`/admin/bulk-remove-bg?${params.toString()}`, {
@@ -518,75 +542,80 @@
     
     // View staff details
     async function viewDetails(staffId) {
-        const response = await fetch(`/get-staff-details/${staffId}`);
-        const staff = await response.json();
-        
-        if (staff.success) {
-            const content = `
-                <div class="row">
-                    <div class="col-md-5 text-center">
-                        <div class="staff-detail">
-                            <label class="detail-label">Profile Photo</label>
-                            ${staff.photo_url ? 
-                                `<img src="${staff.photo_url}?${Date.now()}" class="modal-photo" alt="Staff Photo">` : 
-                                '<div class="text-muted">No photo available</div>'
-                            }
-                        </div>
-                        <div class="staff-detail mt-3">
-                            <label class="detail-label">Signature</label>
-                            <div>
-                                ${staff.signature_url ? 
-                                    `<img src="${staff.signature_url}?${Date.now()}" class="modal-signature" alt="Signature">` : 
-                                    '<div class="text-muted">No signature available</div>'
+        try {
+            const response = await fetch(`/get-staff-details/${staffId}`);
+            const staff = await response.json();
+            
+            if (staff.success) {
+                const content = `
+                    <div class="row">
+                        <div class="col-md-5 text-center">
+                            <div class="staff-detail">
+                                <label class="detail-label">Profile Photo</label>
+                                ${staff.photo_url ? 
+                                    `<img src="${staff.photo_url}?${Date.now()}" class="modal-photo" alt="Staff Photo" onerror="this.src='{{ url_for('static', filename='default-avatar.png') }}'">` : 
+                                    '<div class="text-muted">No photo available</div>'
                                 }
                             </div>
-                            ${staff.has_clean ? '<span class="badge bg-success mt-2">✓ Clean Signature Available</span>' : ''}
-                            ${staff.signature_url && !staff.has_clean ? '<button class="btn btn-warning btn-sm mt-2" onclick="removeBackgroundFromModal(' + staff.id + ')"><i class="fas fa-magic"></i> Remove Background</button>' : ''}
+                            <div class="staff-detail mt-3">
+                                <label class="detail-label">Signature</label>
+                                <div>
+                                    ${staff.signature_url ? 
+                                        `<img src="${staff.signature_url}?${Date.now()}" class="modal-signature" alt="Signature" onerror="this.style.display='none'">` : 
+                                        '<div class="text-muted">No signature available</div>'
+                                    }
+                                </div>
+                                ${staff.has_clean ? '<span class="badge bg-success mt-2">✓ Clean Signature Available</span>' : ''}
+                                ${staff.signature_url && !staff.has_clean ? '<button class="btn btn-warning btn-sm mt-2" onclick="removeBackgroundFromModal(' + staff.id + ')"><i class="fas fa-magic"></i> Remove Background</button>' : ''}
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-md-7">
-                        <h4>${escapeHtml(staff.full_name)}</h4>
-                        <hr>
-                        <div class="staff-detail">
-                            <label class="detail-label"><i class="fas fa-envelope"></i> Email:</label>
-                            <p>${escapeHtml(staff.email)}</p>
-                        </div>
-                        <div class="staff-detail">
-                            <label class="detail-label"><i class="fas fa-phone"></i> Phone:</label>
-                            <p>${escapeHtml(staff.phone_number)}</p>
-                        </div>
-                        <div class="staff-detail">
-                            <label class="detail-label"><i class="fas fa-building"></i> Ministry:</label>
-                            <p>${escapeHtml(staff.ministry || 'Not specified')}</p>
-                        </div>
-                        <div class="staff-detail">
-                            <label class="detail-label"><i class="fas fa-users"></i> Department:</label>
-                            <p>${escapeHtml(staff.department || 'Not specified')}</p>
-                        </div>
-                        <div class="staff-detail">
-                            <label class="detail-label"><i class="fas fa-briefcase"></i> Designation:</label>
-                            <p>${escapeHtml(staff.designation || 'Not specified')}</p>
-                        </div>
-                        <div class="share-section">
-                            <h6>Quick Actions</h6>
-                            <div class="d-grid gap-2">
-                                <button class="btn btn-primary btn-sm" onclick="shareItem(${staff.id}, 'photo')">
-                                    <i class="fas fa-camera"></i> Share Photo
-                                </button>
-                                <button class="btn btn-warning btn-sm" onclick="shareItem(${staff.id}, 'signature')">
-                                    <i class="fas fa-signature"></i> Share Signature
-                                </button>
-                                <button class="btn btn-info btn-sm" onclick="editStaff(${staff.id})">
-                                    <i class="fas fa-edit"></i> Edit Staff
-                                </button>
+                        <div class="col-md-7">
+                            <h4>${escapeHtml(staff.full_name)}</h4>
+                            <hr>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-envelope"></i> Email:</label>
+                                <p>${escapeHtml(staff.email)}</p>
+                            </div>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-phone"></i> Phone:</label>
+                                <p>${escapeHtml(staff.phone_number)}</p>
+                            </div>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-building"></i> MDA (Ministry/Department/Agency):</label>
+                                <p>${escapeHtml(staff.mda || 'Not specified')}</p>
+                            </div>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-users"></i> Department:</label>
+                                <p>${escapeHtml(staff.department || 'Not specified')}</p>
+                            </div>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-briefcase"></i> Designation:</label>
+                                <p>${escapeHtml(staff.designation || 'Not specified')}</p>
+                            </div>
+                            <div class="share-section">
+                                <h6>Quick Actions</h6>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary btn-sm" onclick="shareItem(${staff.id}, 'photo')">
+                                        <i class="fas fa-camera"></i> Share Photo
+                                    </button>
+                                    <button class="btn btn-warning btn-sm" onclick="shareItem(${staff.id}, 'signature')">
+                                        <i class="fas fa-signature"></i> Share Signature
+                                    </button>
+                                    <button class="btn btn-info btn-sm" onclick="editStaff(${staff.id})">
+                                        <i class="fas fa-edit"></i> Edit Staff
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
-            
-            document.getElementById('previewContent').innerHTML = content;
-            new bootstrap.Modal(document.getElementById('previewModal')).show();
+                `;
+                
+                document.getElementById('previewContent').innerHTML = content;
+                new bootstrap.Modal(document.getElementById('previewModal')).show();
+            }
+        } catch (error) {
+            console.error('Error loading staff details:', error);
+            showNotification('Error loading staff details', 'danger');
         }
     }
     
@@ -622,7 +651,7 @@
             const content = `
                 <div class="text-center">
                     <h6>${escapeHtml(data.name)}</h6>
-                    <img src="${data.url}?${Date.now()}" class="share-modal-img">
+                    <img src="${data.url}?${Date.now()}" class="share-modal-img" onerror="this.style.display='none'">
                     <div class="mt-3">
                         <label>Shareable Link:</label>
                         <div class="input-group">

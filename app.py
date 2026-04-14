@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, jsonify, send_from_directory
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
+from functools import wraps
 import os
 import io
 import zipfile
@@ -16,12 +17,128 @@ import cloudinary
 import cloudinary.uploader
 from config import Config
 import requests
-# Add this line with other imports
 import re
+import sys
 
+# Fix for PyInstaller - handle resource paths correctly
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable
+    base_path = sys._MEIPASS
+    template_dir = os.path.join(base_path, 'templates')
+    static_dir = os.path.join(base_path, 'static')
+else:
+    # Running as normal Python script
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    template_dir = os.path.join(base_path, 'templates')
+    static_dir = os.path.join(base_path, 'static')
+
+# ==================== LICENSE MANAGER ====================
+import hashlib
+import json
+import platform
+import socket
+import uuid
+from datetime import timedelta
+
+class LicenseManager:
+    def __init__(self, license_file='license.lic'):
+        self.license_file = license_file
+        self.system_id = self.generate_system_id()
+        
+    def generate_system_id(self):
+        """Generate a unique system ID based on hardware"""
+        try:
+            mac = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) 
+                           for elements in range(0, 2*6, 2)][::-1])
+            computer_name = socket.gethostname()
+            platform_info = platform.platform()
+            system_string = f"{mac}-{computer_name}-{platform_info}"
+            system_id = hashlib.sha256(system_string.encode()).hexdigest()[:32]
+            return system_id
+        except:
+            return hashlib.sha256(socket.gethostname().encode()).hexdigest()[:32]
+    
+    def generate_license(self, customer_name, email, expiry_days=30, max_users=5):
+        """Generate a license key (for admin use)"""
+        license_data = {
+            'customer_name': customer_name,
+            'email': email,
+            'system_id': self.system_id,
+            'issue_date': datetime.now().isoformat(),
+            'expiry_date': (datetime.now() + timedelta(days=expiry_days)).isoformat(),
+            'max_users': max_users,
+            'features': ['staff_management', 'background_removal', 'whatsapp_sharing']
+        }
+        license_json = json.dumps(license_data)
+        license_key = base64.b64encode(license_json.encode()).decode()
+        with open(self.license_file, 'w') as f:
+            f.write(license_key)
+        return license_key
+    
+    def validate_license(self):
+        """Validate the license and return status"""
+        if not os.path.exists(self.license_file):
+            return {'valid': False, 'error': 'License file not found', 'code': 'NO_LICENSE'}
+        try:
+            with open(self.license_file, 'r') as f:
+                license_key = f.read().strip()
+            license_json = base64.b64decode(license_key).decode()
+            license_data = json.loads(license_json)
+            if license_data.get('system_id') != self.system_id:
+                return {'valid': False, 'error': 'This license is not valid for this computer', 'code': 'INVALID_SYSTEM'}
+            expiry_date = datetime.fromisoformat(license_data['expiry_date'])
+            if datetime.now() > expiry_date:
+                return {'valid': False, 'error': f'License expired on {expiry_date.strftime("%Y-%m-%d")}', 'code': 'EXPIRED'}
+            days_remaining = (expiry_date - datetime.now()).days
+            return {
+                'valid': True,
+                'customer_name': license_data['customer_name'],
+                'email': license_data['email'],
+                'expiry_date': expiry_date,
+                'days_remaining': days_remaining,
+                'max_users': license_data.get('max_users', 5),
+                'features': license_data.get('features', [])
+            }
+        except Exception as e:
+            return {'valid': False, 'error': f'Invalid license file: {str(e)}', 'code': 'INVALID_FILE'}
+    
+    def create_trial_license(self, days=30):
+        """Create a trial license for testing"""
+        license_data = {
+            'customer_name': 'Trial User',
+            'email': 'trial@example.com',
+            'system_id': self.system_id,
+            'issue_date': datetime.now().isoformat(),
+            'expiry_date': (datetime.now() + timedelta(days=days)).isoformat(),
+            'max_users': 3,
+            'features': ['staff_management'],
+            'is_trial': True
+        }
+        license_json = json.dumps(license_data)
+        license_key = base64.b64encode(license_json.encode()).decode()
+        with open(self.license_file, 'w') as f:
+            f.write(license_key)
+        return license_key
+
+# Initialize license manager
+license_manager = LicenseManager()
+
+def license_required(f):
+    """Decorator to check license before accessing routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        result = license_manager.validate_license()
+        if not result['valid']:
+            return redirect(url_for('activation_page'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Update Flask template and static folders
+app = Flask(__name__,
+           template_folder=template_dir,
+           static_folder=static_dir)
 
 # ==================== ENVIRONMENT DETECTION ====================
-# Set DISABLE_WHATSAPP=true and DISABLE_REMBG=true on Render only
 DISABLE_WHATSAPP = os.environ.get('DISABLE_WHATSAPP', 'False').lower() == 'true'
 DISABLE_REMBG = os.environ.get('DISABLE_REMBG', 'False').lower() == 'true'
 
@@ -37,7 +154,6 @@ else:
     print("⚠️ Cloudinary not configured - clean signatures will be stored locally only")
 
 # ==================== WHATSAPP IMPORTS (Conditional) ====================
-# ==================== WHATSAPP IMPORTS (Conditional) ====================
 kit = None
 webbrowser = None
 
@@ -52,6 +168,7 @@ if not DISABLE_WHATSAPP:
         webbrowser = None
 else:
     print("ℹ️ WhatsApp sharing disabled")
+
 # ==================== REMBG IMPORTS (Conditional) ====================
 if not DISABLE_REMBG:
     try:
@@ -72,12 +189,11 @@ else:
         return x
 
 from config import Config
-from models import db, Staff, Admin, ImportLog
+from models import db, Staff, Admin, ImportLog, MDAOption
 from utils import process_imported_staff, download_from_google_drive, save_image_file, clean_filename, init_db
 
-app = Flask(__name__)
 app.config.from_object(Config)
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 db.init_app(app)
 login_manager = LoginManager()
@@ -101,7 +217,6 @@ def save_image_from_data_url(data_url, folder, filename):
     """Save image from data URL to file"""
     if not data_url or not data_url.startswith('data:image'):
         return None
-    
     try:
         header, encoded = data_url.split(',', 1)
         image_data = base64.b64decode(encoded)
@@ -114,6 +229,124 @@ def save_image_from_data_url(data_url, folder, filename):
         print(f"Error saving image from data URL: {e}")
         return None
 
+# ==================== LICENSE ACTIVATION ROUTES (No Login Required) ====================
+
+@app.route('/activate', methods=['GET', 'POST'])
+def activation_page():
+    """License activation page - accessible without login"""
+    result = license_manager.validate_license()
+    if result['valid']:
+        flash('License is already active and valid!', 'success')
+        return redirect(url_for('staff_login'))
+    
+    if request.method == 'POST':
+        license_key = request.form.get('license_key')
+        
+        if not license_key:
+            flash('Please enter a license key', 'danger')
+            return render_template('activation.html')
+        
+        try:
+            license_json = base64.b64decode(license_key).decode()
+            license_data = json.loads(license_json)
+            
+            expiry_date = datetime.fromisoformat(license_data['expiry_date'])
+            if datetime.now() > expiry_date:
+                flash(f'License expired on {expiry_date.strftime("%Y-%m-%d")}', 'danger')
+                return render_template('activation.html')
+            
+            with open('license.lic', 'w') as f:
+                f.write(license_key)
+            
+            flash('✅ License activated successfully! You can now log in.', 'success')
+            return redirect(url_for('staff_login'))
+            
+        except Exception as e:
+            flash(f'Invalid license key: {str(e)}', 'danger')
+            return render_template('activation.html')
+    
+    return render_template('activation.html')
+
+# ==================== MDA MANAGEMENT ROUTES ====================
+
+@app.route('/admin/mda-options')
+@login_required
+def manage_mda_options():
+    """Manage MDA options for dropdown"""
+    if session.get('user_type') != 'admin' or session.get('user_role') != 'super_admin':
+        flash('Permission denied', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    mda_options = MDAOption.query.order_by(MDAOption.name).all()
+    return render_template('mda_options.html', mda_options=mda_options)
+
+@app.route('/admin/mda-options/add', methods=['POST'])
+@login_required
+def add_mda_option():
+    """Add new MDA option"""
+    if session.get('user_type') != 'admin' or session.get('user_role') != 'super_admin':
+        flash('Permission denied', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    mda_name = request.form.get('mda_name')
+    if mda_name:
+        existing = MDAOption.query.filter_by(name=mda_name).first()
+        if not existing:
+            new_mda = MDAOption(name=mda_name)
+            db.session.add(new_mda)
+            db.session.commit()
+            flash(f'MDA "{mda_name}" added successfully!', 'success')
+        else:
+            flash(f'MDA "{mda_name}" already exists!', 'warning')
+    else:
+        flash('MDA name cannot be empty!', 'danger')
+    
+    return redirect(url_for('manage_mda_options'))
+
+@app.route('/admin/mda-options/delete/<int:id>')
+@login_required
+def delete_mda_option(id):
+    """Delete MDA option"""
+    if session.get('user_type') != 'admin' or session.get('user_role') != 'super_admin':
+        flash('Permission denied', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    mda = MDAOption.query.get_or_404(id)
+    db.session.delete(mda)
+    db.session.commit()
+    flash(f'MDA "{mda.name}" deleted successfully!', 'success')
+    return redirect(url_for('manage_mda_options'))
+
+@app.route('/get-mda-options')
+@login_required
+def get_mda_options():
+    """Get all MDA options as JSON"""
+    mda_options = MDAOption.query.order_by(MDAOption.name).all()
+    return jsonify({'mda_options': [mda.name for mda in mda_options]})
+
+@app.route('/add-mda-option', methods=['POST'])
+@login_required
+def add_mda_option_json():
+    """Add new MDA option via JSON"""
+    if session.get('user_type') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    data = request.json
+    mda_name = data.get('name')
+    
+    if not mda_name:
+        return jsonify({'error': 'MDA name required'}), 400
+    
+    existing = MDAOption.query.filter_by(name=mda_name).first()
+    if existing:
+        return jsonify({'error': 'MDA already exists'}), 400
+    
+    new_mda = MDAOption(name=mda_name)
+    db.session.add(new_mda)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'MDA added successfully'})
+
 # ==================== BACKGROUND REMOVAL FUNCTIONS ====================
 
 def remove_signature_background_rembg(image_path, output_path):
@@ -121,34 +354,23 @@ def remove_signature_background_rembg(image_path, output_path):
     if not REMBG_AVAILABLE:
         print("❌ rembg not available - background removal skipped")
         return False
-    
     try:
         with open(image_path, 'rb') as f:
             input_image = f.read()
-        
         output_image = remove(input_image, session=rembg_session)
-        
         with open(output_path, 'wb') as f:
             f.write(output_image)
-        
-        # Open and enhance the result
         img = Image.open(output_path)
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
-        
-        # Enhance contrast to make signature darker
         rgb = img.convert('RGB')
         enhancer = ImageEnhance.Contrast(rgb)
         rgb = enhancer.enhance(1.5)
         enhancer = ImageEnhance.Sharpness(rgb)
         rgb = enhancer.enhance(2.0)
-        
-        # Combine with alpha
         result = Image.new('RGBA', rgb.size)
         result.paste(rgb, (0, 0))
         result.putalpha(img.split()[-1])
-        
-        # Crop to content
         bbox = result.getbbox()
         if bbox:
             padding = 10
@@ -157,10 +379,8 @@ def remove_signature_background_rembg(image_path, output_path):
             right = min(result.width, bbox[2] + padding)
             bottom = min(result.height, bbox[3] + padding)
             result = result.crop((left, top, right, bottom))
-        
         result.save(output_path, 'PNG')
         return True
-        
     except Exception as e:
         print(f"Rembg error: {e}")
         return False
@@ -171,33 +391,19 @@ def make_background_transparent_with_edges(image_path, output_path):
         img = Image.open(image_path)
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
-        
         img_array = np.array(img)
-        
-        # Get RGB channels
         r = img_array[:,:,0].astype(float)
         g = img_array[:,:,1].astype(float)
         b = img_array[:,:,2].astype(float)
-        
-        # Calculate brightness
         brightness = (r + g + b) / 3
-        
-        # Create mask for background (light pixels)
         background_mask = brightness > 200
-        
-        # Set alpha to 0 for background
         img_array[background_mask, 3] = 0
         img_array[~background_mask, 3] = 255
-        
         result = Image.fromarray(img_array, 'RGBA')
-        
-        # Apply slight blur to smooth edges
         alpha = result.split()[-1]
         alpha_smooth = alpha.filter(ImageFilter.GaussianBlur(radius=1))
         alpha_smooth = alpha_smooth.point(lambda x: 255 if x > 127 else 0)
         result.putalpha(alpha_smooth)
-        
-        # Crop to content
         bbox = result.getbbox()
         if bbox:
             padding = 10
@@ -206,28 +412,22 @@ def make_background_transparent_with_edges(image_path, output_path):
             right = min(result.width, bbox[2] + padding)
             bottom = min(result.height, bbox[3] + padding)
             result = result.crop((left, top, right, bottom))
-        
-        # Enhance
         if result.size[0] > 0:
             rgb = result.convert('RGB')
             enhancer = ImageEnhance.Contrast(rgb)
             rgb = enhancer.enhance(2.0)
             enhancer = ImageEnhance.Sharpness(rgb)
             rgb = enhancer.enhance(2.5)
-            
             final = Image.new('RGBA', rgb.size)
             final.paste(rgb, (0, 0))
             final.putalpha(result.split()[-1])
             result = final
-        
         result.save(output_path, 'PNG')
         return True
-        
     except Exception as e:
         print(f"Edge removal error: {e}")
         return False
 
-# Choose the best available method
 if REMBG_AVAILABLE:
     remove_signature_background = remove_signature_background_rembg
 else:
@@ -240,7 +440,6 @@ def share_via_whatsapp(phone_number, file_path, caption=""):
     if DISABLE_WHATSAPP or kit is None:
         print("ℹ️ WhatsApp sharing disabled")
         return False
-    
     try:
         if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
             kit.sendwhats_image(phone_number, file_path, caption, wait_time=15, close_time=3)
@@ -257,7 +456,6 @@ def share_via_whatsapp(phone_number, file_path, caption=""):
 @app.route('/uploads/<folder>/<path:filename>')
 def uploaded_file(folder, filename):
     filename = os.path.basename(filename)
-    
     if folder == 'staff_images':
         upload_path = Config.STAFF_IMAGES_FOLDER
     elif folder == 'staff_signatures':
@@ -266,29 +464,32 @@ def uploaded_file(folder, filename):
         upload_path = Config.CLEAN_SIGNATURES_FOLDER
     else:
         upload_path = 'temp'
-    
     return send_from_directory(upload_path, filename)
 
 @app.route('/')
 def index():
+    result = license_manager.validate_license()
+    if not result['valid']:
+        return redirect(url_for('activation_page'))
     return render_template('index.html')
 
 # ==================== STAFF LOGIN/REGISTRATION ====================
 
 @app.route('/staff-login', methods=['GET', 'POST'])
 def staff_login():
+    result = license_manager.validate_license()
+    if not result['valid']:
+        return redirect(url_for('activation_page'))
+    
     if request.method == 'POST':
         login_input = request.form.get('username')
         password = request.form.get('password')
-        
-        # Try to find by username, email, phone number, OR full name
         user = Staff.query.filter(
             (Staff.email == login_input) | 
             (Staff.username == login_input) | 
             (Staff.phone_number == login_input) |
             (Staff.full_name == login_input)
         ).first()
-        
         if user and user.check_password(password):
             login_user(user)
             session['user_type'] = 'staff'
@@ -296,14 +497,17 @@ def staff_login():
             return redirect(url_for('staff_dashboard'))
         else:
             flash('Invalid credentials. Please check your username/email/phone/full name and password.', 'danger')
-    
     return render_template('staff_login.html')
+
 @app.route('/admin-login', methods=['GET', 'POST'])
 def admin_login():
+    result = license_manager.validate_license()
+    if not result['valid']:
+        return redirect(url_for('activation_page'))
+    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
         user = Admin.query.filter_by(username=username).first()
         if user and user.check_password(password):
             login_user(user)
@@ -313,46 +517,63 @@ def admin_login():
             return redirect(url_for('admin_dashboard'))
         else:
             flash('Invalid admin credentials', 'danger')
-    
     return render_template('admin_login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    result = license_manager.validate_license()
+    if not result['valid']:
+        return redirect(url_for('activation_page'))
+    
     if request.method == 'POST':
         full_name = request.form.get('full_name')
         email = request.form.get('email')
         phone = request.form.get('phone')
-        ministry = request.form.get('ministry')
         department = request.form.get('department')
         designation = request.form.get('designation')
+        mda = request.form.get('mda')
         
-        # Check if email already exists
+        # Validate required fields
+        if not all([full_name, email, phone, mda]):
+            flash('Please fill in all required fields: Full Name, Email, Phone Number, and MDA!', 'danger')
+            return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
+        
+        # Check license user limit
+        if result['valid']:
+            current_users = Staff.query.count()
+            if current_users >= result['max_users']:
+                flash(f'Maximum user limit ({result["max_users"]}) reached. Please upgrade your license.', 'danger')
+                return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
+        
         existing_staff = Staff.query.filter_by(email=email).first()
         if existing_staff:
             flash(f'Email {email} is already registered. Please use a different email.', 'danger')
-            return render_template('register.html')
+            return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
         
-        # Check if phone already exists
         existing_phone = Staff.query.filter_by(phone_number=phone).first()
         if existing_phone:
             flash(f'Phone number {phone} is already registered. Please use a different number.', 'danger')
-            return render_template('register.html')
+            return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
         
-        # Auto-create username from full name (remove spaces, lowercase, remove special chars)
         username = re.sub(r'[^a-zA-Z0-9_]', '_', full_name.lower().replace(' ', '_'))
-        
-        # Check if username already exists, append number if needed
         base_username = username
         counter = 1
         while Staff.query.filter_by(username=username).first():
             username = f"{base_username}{counter}"
             counter += 1
         
+        # If MDA is not in options, add it
+        if mda:
+            existing_mda = MDAOption.query.filter_by(name=mda).first()
+            if not existing_mda:
+                new_mda = MDAOption(name=mda)
+                db.session.add(new_mda)
+                db.session.commit()
+        
         image_url = None
         photo_data = request.form.get('photo_data')
         photo_file = request.files.get('photo')
         
-        # Handle photo upload to Cloudinary
         if photo_file and photo_file.filename:
             try:
                 upload_result = cloudinary.uploader.upload(
@@ -366,11 +587,12 @@ def register():
             except Exception as e:
                 print(f"Cloudinary photo error: {e}")
                 flash(f'Photo upload failed: {str(e)}', 'danger')
-                return render_template('register.html')
+                return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
         elif photo_data and photo_data.startswith('data:image'):
             try:
                 header, encoded = photo_data.split(',', 1)
                 image_bytes = base64.b64decode(encoded)
+                os.makedirs('temp', exist_ok=True)
                 temp_path = os.path.join('temp', f"temp_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                 with open(temp_path, 'wb') as f:
                     f.write(image_bytes)
@@ -381,13 +603,12 @@ def register():
             except Exception as e:
                 print(f"Camera upload error: {e}")
                 flash(f'Photo upload failed: {str(e)}', 'danger')
-                return render_template('register.html')
+                return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
         
         signature_url = None
         signature_data = request.form.get('signature_data')
         signature_file = request.files.get('signature')
         
-        # Handle signature upload to Cloudinary
         if signature_file and signature_file.filename:
             try:
                 upload_result = cloudinary.uploader.upload(
@@ -401,11 +622,12 @@ def register():
             except Exception as e:
                 print(f"Cloudinary signature error: {e}")
                 flash(f'Signature upload failed: {str(e)}', 'danger')
-                return render_template('register.html')
+                return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
         elif signature_data and signature_data.startswith('data:image'):
             try:
                 header, encoded = signature_data.split(',', 1)
                 image_bytes = base64.b64decode(encoded)
+                os.makedirs('temp', exist_ok=True)
                 temp_path = os.path.join('temp', f"temp_signature_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                 with open(temp_path, 'wb') as f:
                     f.write(image_bytes)
@@ -416,22 +638,20 @@ def register():
             except Exception as e:
                 print(f"Camera upload error: {e}")
                 flash(f'Signature upload failed: {str(e)}', 'danger')
-                return render_template('register.html')
+                return render_template('register.html', mda_options=MDAOption.query.order_by(MDAOption.name).all())
         
-        if all([full_name, email, phone]):
+        if all([full_name, email, phone, mda]):
             staff = Staff(
                 full_name=full_name,
                 email=email,
                 phone_number=phone,
-                ministry=ministry,
                 department=department,
                 designation=designation,
                 image_path=image_url,
                 signature_path=signature_url,
-                username=username
+                username=username,
+                mda=mda
             )
-            
-            # Set the auto-generated password (phone number)
             staff.set_password(phone)
             
             db.session.add(staff)
@@ -445,37 +665,114 @@ def register():
         else:
             flash('Please fill all required fields', 'danger')
     
-    return render_template('register.html')
+    mda_options = MDAOption.query.order_by(MDAOption.name).all()
+    return render_template('register.html', mda_options=mda_options)
+
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     session.clear()
     return redirect(url_for('index'))
+
+# ==================== LICENSE ROUTES (Super Admin Only) ====================
+
+@app.route('/admin/license')
+@login_required
+def manage_license():
+    if session.get('user_role') != 'super_admin':
+        flash('Permission denied. Only Super Admin can access license management.', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    license_status = license_manager.validate_license()
+    return render_template('license_management.html', license=license_status)
+
+@app.route('/admin/generate-license', methods=['POST'])
+@login_required
+def generate_license():
+    if session.get('user_role') != 'super_admin':
+        return jsonify({'error': 'Permission denied. Only Super Admin can generate licenses.'}), 403
+    
+    customer_name = request.form.get('customer_name')
+    email = request.form.get('email')
+    expiry_days = int(request.form.get('expiry_days', 30))
+    max_users = int(request.form.get('max_users', 5))
+    
+    license_key = license_manager.generate_license(customer_name, email, expiry_days, max_users)
+    
+    flash(f'✅ License generated successfully!', 'success')
+    flash(f'📋 License Key: {license_key}', 'info')
+    flash(f'👤 Customer: {customer_name}', 'info')
+    flash(f'📅 Expires: {expiry_days} days', 'info')
+    flash(f'👥 Max Users: {max_users}', 'info')
+    
+    return redirect(url_for('manage_license'))
+
+@app.route('/admin/create-trial', methods=['POST'])
+@login_required
+def create_trial():
+    if session.get('user_role') != 'super_admin':
+        return jsonify({'error': 'Permission denied. Only Super Admin can create trial licenses.'}), 403
+    
+    days = int(request.form.get('days', 30))
+    license_manager.create_trial_license(days)
+    
+    flash(f'✅ {days}-day trial license created successfully!', 'success')
+    flash(f'📋 License file saved to: license.lic', 'info')
+    
+    return redirect(url_for('manage_license'))
+
+@app.route('/admin/activate-license', methods=['POST'])
+@login_required
+def activate_license():
+    if session.get('user_role') != 'super_admin':
+        return jsonify({'error': 'Permission denied. Only Super Admin can activate licenses.'}), 403
+    
+    license_key = request.form.get('license_key')
+    
+    if not license_key:
+        flash('Please provide a license key', 'danger')
+        return redirect(url_for('manage_license'))
+    
+    try:
+        license_json = base64.b64decode(license_key).decode()
+        license_data = json.loads(license_json)
+        
+        expiry_date = datetime.fromisoformat(license_data['expiry_date'])
+        if datetime.now() > expiry_date:
+            flash(f'❌ License expired on {expiry_date.strftime("%Y-%m-%d")}', 'danger')
+            return redirect(url_for('manage_license'))
+        
+        with open('license.lic', 'w') as f:
+            f.write(license_key)
+        
+        flash('✅ License activated successfully!', 'success')
+        flash(f'👤 Customer: {license_data["customer_name"]}', 'info')
+        flash(f'📅 Expires: {expiry_date.strftime("%Y-%m-%d")}', 'info')
+        
+    except Exception as e:
+        flash(f'❌ Invalid license key: {str(e)}', 'danger')
+    
+    return redirect(url_for('manage_license'))
+
 # ==================== IMAGE UPLOAD ROUTES ====================
 
 @app.route('/save-edited-image', methods=['POST'])
 @login_required
 def save_edited_image():
-    """Save edited image from editor"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
-    
     try:
         data = request.json
         staff_id = data.get('staff_id')
         image_type = data.get('type')
         image_data = data.get('image_data')
-        
         staff = Staff.query.get_or_404(staff_id)
-        
         if image_data and image_data.startswith('data:image'):
             header, encoded = image_data.split(',', 1)
             image_bytes = base64.b64decode(encoded)
-            
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             clean_name = clean_filename(staff.full_name)
-            
             if image_type == 'photo':
                 filename = f"{clean_name}_photo_{timestamp}.png"
                 folder = Config.STAFF_IMAGES_FOLDER
@@ -488,17 +785,13 @@ def save_edited_image():
                 if staff.signature_path and os.path.exists(staff.signature_path):
                     os.remove(staff.signature_path)
                 staff.signature_path = os.path.join(folder, filename)
-            
             os.makedirs(folder, exist_ok=True)
             filepath = os.path.join(folder, filename)
             with open(filepath, 'wb') as f:
                 f.write(image_bytes)
-            
             db.session.commit()
             return jsonify({'success': True})
-        
         return jsonify({'error': 'Invalid image data'}), 400
-        
     except Exception as e:
         print(f"Error saving edited image: {e}")
         return jsonify({'error': str(e)}), 500
@@ -506,21 +799,14 @@ def save_edited_image():
 @app.route('/upload-staff-photo', methods=['POST'])
 @login_required
 def upload_staff_photo():
-    """Upload new staff photo to Cloudinary"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
-    
     try:
         staff_id = request.form.get('staff_id')
         photo = request.files.get('photo')
-        
         if not photo:
             return jsonify({'error': 'No photo provided'}), 400
-        
         staff = Staff.query.get_or_404(staff_id)
-        clean_name = clean_filename(staff.full_name)
-        
-        # Upload to Cloudinary
         upload_result = cloudinary.uploader.upload(
             photo,
             folder="staff_photos",
@@ -528,39 +814,27 @@ def upload_staff_photo():
             overwrite=True
         )
         cloudinary_url = upload_result['secure_url']
-        
-        # Delete old photo from local storage if it exists and is a local file
         if staff.image_path and not staff.image_path.startswith('http'):
             if os.path.exists(staff.image_path):
                 os.remove(staff.image_path)
-        
-        # Save Cloudinary URL to database
         staff.image_path = cloudinary_url
         db.session.commit()
-        
         return jsonify({'success': True, 'image_url': cloudinary_url})
-        
     except Exception as e:
         print(f"Error uploading photo: {e}")
         return jsonify({'error': str(e)}), 500
+
 @app.route('/upload-staff-signature', methods=['POST'])
 @login_required
 def upload_staff_signature():
-    """Upload new staff signature to Cloudinary"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
-    
     try:
         staff_id = request.form.get('staff_id')
         signature = request.files.get('signature')
-        
         if not signature:
             return jsonify({'error': 'No signature provided'}), 400
-        
         staff = Staff.query.get_or_404(staff_id)
-        clean_name = clean_filename(staff.full_name)
-        
-        # Upload to Cloudinary
         upload_result = cloudinary.uploader.upload(
             signature,
             folder="staff_signatures",
@@ -568,67 +842,45 @@ def upload_staff_signature():
             overwrite=True
         )
         cloudinary_url = upload_result['secure_url']
-        
-        # Delete old signature from local storage if it exists and is a local file
         if staff.signature_path and not staff.signature_path.startswith('http'):
             if os.path.exists(staff.signature_path):
                 os.remove(staff.signature_path)
-        
-        # Save Cloudinary URL to database
         staff.signature_path = cloudinary_url
         db.session.commit()
-        
         return jsonify({'success': True, 'signature_url': cloudinary_url})
-        
     except Exception as e:
         print(f"Error uploading signature: {e}")
-        return jsonify({'error': str(e)}), 500# ==================== BACKGROUND REMOVAL ROUTES ====================
+        return jsonify({'error': str(e)}), 500
+
+# ==================== BACKGROUND REMOVAL ROUTES ====================
 
 @app.route('/admin/staff/remove-bg/<int:id>')
 @login_required
 def remove_single_background(id):
-    """Remove background from a single signature and upload to Cloudinary"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
-    
     if not REMBG_AVAILABLE:
         return jsonify({'error': 'Background removal is disabled in this environment'}), 503
-    
     staff = Staff.query.get_or_404(id)
-    
     if not staff.signature_path:
         return jsonify({'error': 'No signature found'}), 404
-    
     temp_file = None
     try:
-        # Determine the source file path
         if staff.signature_path.startswith('http'):
-            # It's a Cloudinary URL - download it first
-            import requests
-            print(f"Downloading signature from Cloudinary: {staff.signature_path}")
             response = requests.get(staff.signature_path)
             temp_file = os.path.join('temp', f"temp_sig_{staff.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
             with open(temp_file, 'wb') as f:
                 f.write(response.content)
             sig_path = temp_file
-            print(f"✅ Downloaded to temp file: {temp_file}")
         else:
-            # Local file path
             sig_filename = os.path.basename(staff.signature_path)
             sig_path = os.path.join(Config.STAFF_SIGNATURES_FOLDER, sig_filename)
-            print(f"Using local signature: {sig_path}")
-        
         if os.path.exists(sig_path):
             clean_filename = f"clean_{staff.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, clean_filename)
-            
             success = remove_signature_background(sig_path, clean_path)
-            
             if success:
-                # Save local path as fallback
                 staff.signature_bg_removed_path = clean_filename
-                
-                # Upload to Cloudinary if configured
                 if Config.CLOUDINARY_CLOUD_NAME:
                     try:
                         upload_result = cloudinary.uploader.upload(
@@ -639,104 +891,75 @@ def remove_single_background(id):
                         )
                         cloudinary_url = upload_result['secure_url']
                         staff.signature_bg_removed_url = cloudinary_url
-                        print(f"✅ Uploaded to Cloudinary: {cloudinary_url}")
                     except Exception as cloud_error:
                         print(f"⚠️ Cloudinary upload error: {cloud_error}")
-                        print("Continuing with local storage only")
-                else:
-                    print("ℹ️ Cloudinary not configured - saving locally only")
-                
                 db.session.commit()
-                
-                # Clean up temp file if it was created
                 if temp_file and os.path.exists(temp_file):
                     os.remove(temp_file)
-                    print(f"🧹 Cleaned up temp file: {temp_file}")
-                
                 return jsonify({'success': True, 'message': 'Background removed successfully!'})
             else:
                 return jsonify({'error': 'Background removal failed'}), 500
         else:
             return jsonify({'error': f'Signature file not found at: {sig_path}'}), 404
-            
     except Exception as e:
         print(f"Error in remove_single_background: {e}")
-        # Clean up temp file if it exists
         if temp_file and os.path.exists(temp_file):
             try:
                 os.remove(temp_file)
             except:
                 pass
         return jsonify({'error': str(e)}), 500
+
 @app.route('/admin/bulk-remove-bg', methods=['POST'])
 @login_required
 def bulk_remove_backgrounds():
-    """Remove backgrounds for signatures based on current filters"""
     if session.get('user_type') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 401
-    
     if not REMBG_AVAILABLE:
         return jsonify({'error': 'Background removal is disabled in this environment'}), 503
-    
     try:
-        # Get filter parameters from request args
         search = request.args.get('search', '')
-        ministry_filter = request.args.get('ministry_filter', '')
+        mda_filter = request.args.get('mda_filter', '')
         
-        # Build query with filters - check BOTH clean signature fields
         query = Staff.query.filter(
             Staff.signature_path.isnot(None),
             Staff.signature_bg_removed_path.is_(None),
             Staff.signature_bg_removed_url.is_(None)
         )
-        
-        # Apply search filter
         if search:
             query = query.filter(
                 Staff.full_name.contains(search) | 
                 Staff.email.contains(search) | 
                 Staff.phone_number.contains(search)
             )
-        
-        # Apply ministry filter
-        if ministry_filter:
-            query = query.filter(Staff.ministry == ministry_filter)
+        if mda_filter:
+            query = query.filter(Staff.mda == mda_filter)
         
         staff_members = query.all()
-        
         if not staff_members:
             return jsonify({'processed': 0, 'failed': 0, 'total': 0, 'message': 'No signatures to process with current filters'})
         
         processed = 0
         failed = 0
-        
         for staff in staff_members:
             temp_file = None
             try:
-                # Determine the source file path
                 if staff.signature_path.startswith('http'):
-                    # It's a Cloudinary URL - download it first
                     response = requests.get(staff.signature_path)
                     temp_file = os.path.join('temp', f"temp_sig_{staff.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                     with open(temp_file, 'wb') as f:
                         f.write(response.content)
                     sig_path = temp_file
                 else:
-                    # Local file path
                     sig_filename = os.path.basename(staff.signature_path)
                     sig_path = os.path.join(Config.STAFF_SIGNATURES_FOLDER, sig_filename)
                 
                 if os.path.exists(sig_path):
                     clean_filename = f"clean_{staff.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                     clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, clean_filename)
-                    
                     success = remove_signature_background(sig_path, clean_path)
-                    
                     if success:
-                        # Save local path as fallback
                         staff.signature_bg_removed_path = clean_filename
-                        
-                        # Upload to Cloudinary if configured
                         if Config.CLOUDINARY_CLOUD_NAME:
                             try:
                                 upload_result = cloudinary.uploader.upload(
@@ -746,49 +969,38 @@ def bulk_remove_backgrounds():
                                     overwrite=True
                                 )
                                 staff.signature_bg_removed_url = upload_result['secure_url']
-                                print(f"✅ Uploaded to Cloudinary: {upload_result['secure_url']}")
                             except Exception as cloud_error:
                                 print(f"⚠️ Cloudinary upload error: {cloud_error}")
-                        
                         processed += 1
                     else:
                         failed += 1
                 else:
                     failed += 1
-                    
             except Exception as e:
                 print(f"Error processing {staff.full_name}: {e}")
                 failed += 1
             finally:
-                # Clean up temp file if it was created
                 if temp_file and os.path.exists(temp_file):
                     try:
                         os.remove(temp_file)
                     except:
                         pass
-        
         db.session.commit()
         return jsonify({'processed': processed, 'failed': failed, 'total': len(staff_members)})
-        
     except Exception as e:
         print(f"Bulk removal error: {e}")
         return jsonify({'error': str(e), 'processed': 0, 'failed': 0, 'total': 0}), 500
+
 # ==================== SHARING ROUTES ====================
 
 @app.route('/get-staff-details/<int:staff_id>')
 @login_required
 def get_staff_details(staff_id):
-    """Get staff details for preview modal"""
     staff = Staff.query.get_or_404(staff_id)
-    
-    photo_url = None
-    if staff.image_path and os.path.exists(staff.image_path):
-        photo_url = url_for('uploaded_file', folder='staff_images', filename=os.path.basename(staff.image_path), _external=True)
-    
+    photo_url = staff.image_path if staff.image_path else None
     signature_url = None
     has_clean = False
     
-    # Priority: Cloudinary URL > local clean path > original signature
     if staff.signature_bg_removed_url:
         signature_url = staff.signature_bg_removed_url
         has_clean = True
@@ -797,8 +1009,8 @@ def get_staff_details(staff_id):
         if os.path.exists(clean_path):
             signature_url = url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path, _external=True)
             has_clean = True
-    elif staff.signature_path and os.path.exists(staff.signature_path):
-        signature_url = url_for('uploaded_file', folder='staff_signatures', filename=os.path.basename(staff.signature_path), _external=True)
+    elif staff.signature_path:
+        signature_url = staff.signature_path
     
     return jsonify({
         'success': True,
@@ -806,7 +1018,7 @@ def get_staff_details(staff_id):
         'full_name': staff.full_name,
         'email': staff.email,
         'phone_number': staff.phone_number,
-        'ministry': staff.ministry,
+        'mda': staff.mda,
         'department': staff.department,
         'designation': staff.designation,
         'photo_url': photo_url,
@@ -817,78 +1029,44 @@ def get_staff_details(staff_id):
 @app.route('/get-share-info/<int:staff_id>/<string:type>')
 @login_required
 def get_share_info(staff_id, type):
-    """Get shareable URL for photo or signature"""
     staff = Staff.query.get_or_404(staff_id)
-    
     if type == 'photo':
-        if not staff.image_path or not os.path.exists(staff.image_path):
+        if not staff.image_path:
             return jsonify({'error': 'No photo found'}), 404
-        filename = os.path.basename(staff.image_path)
-        url = url_for('uploaded_file', folder='staff_images', filename=filename, _external=True)
-        return jsonify({
-            'success': True,
-            'url': url,
-            'name': f"{staff.full_name}'s Photo"
-        })
-    
+        return jsonify({'success': True, 'url': staff.image_path, 'name': f"{staff.full_name}'s Photo"})
     elif type == 'signature':
-        # Priority: Cloudinary URL > local clean path > original signature
         if staff.signature_bg_removed_url:
-            return jsonify({
-                'success': True,
-                'url': staff.signature_bg_removed_url,
-                'name': f"{staff.full_name}'s Signature (Clean - Cloud)"
-            })
+            return jsonify({'success': True, 'url': staff.signature_bg_removed_url, 'name': f"{staff.full_name}'s Signature (Clean - Cloud)"})
         elif staff.signature_bg_removed_path:
             clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
             if os.path.exists(clean_path):
                 url = url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path, _external=True)
-                return jsonify({
-                    'success': True,
-                    'url': url,
-                    'name': f"{staff.full_name}'s Signature (Clean)"
-                })
-        
-        if staff.signature_path and os.path.exists(staff.signature_path):
-            filename = os.path.basename(staff.signature_path)
-            url = url_for('uploaded_file', folder='staff_signatures', filename=filename, _external=True)
-            return jsonify({
-                'success': True,
-                'url': url,
-                'name': f"{staff.full_name}'s Signature"
-            })
-        
+                return jsonify({'success': True, 'url': url, 'name': f"{staff.full_name}'s Signature (Clean)"})
+        if staff.signature_path:
+            return jsonify({'success': True, 'url': staff.signature_path, 'name': f"{staff.full_name}'s Signature"})
         return jsonify({'error': 'No signature found'}), 404
-    
     return jsonify({'error': 'Invalid type'}), 400
 
 @app.route('/share-whatsapp', methods=['POST'])
 @login_required
 def share_whatsapp():
-    """Share photo or signature via WhatsApp"""
     if DISABLE_WHATSAPP or kit is None:
         return jsonify({'error': 'WhatsApp sharing is disabled in this environment'}), 503
-    
     data = request.json
     staff_id = data.get('staff_id')
     share_type = data.get('type')
     phone_number = data.get('phone_number')
-    
     if not phone_number:
         return jsonify({'error': 'Phone number required'}), 400
-    
     if not phone_number.startswith('+'):
         phone_number = '+' + phone_number
-    
     staff = Staff.query.get_or_404(staff_id)
-    
     if share_type == 'photo':
-        if not staff.image_path or not os.path.exists(staff.image_path):
+        if not staff.image_path:
             return jsonify({'error': 'No photo found'}), 404
         file_path = staff.image_path
-        caption = f"Photo of {staff.full_name}\nMinistry: {staff.ministry or 'N/A'}\nDepartment: {staff.department or 'N/A'}"
+        caption = f"Photo of {staff.full_name}\nMDA: {staff.mda or 'N/A'}\nDepartment: {staff.department or 'N/A'}"
     else:
-        # Priority: Cloudinary URL > local clean path > original signature
         if staff.signature_bg_removed_url:
             file_path = staff.signature_bg_removed_url
         elif staff.signature_bg_removed_path:
@@ -897,11 +1075,7 @@ def share_whatsapp():
             file_path = staff.signature_path
         else:
             return jsonify({'error': 'No signature found'}), 404
-        caption = f"Signature of {staff.full_name}\nMinistry: {staff.ministry or 'N/A'}\nDepartment: {staff.department or 'N/A'}"
-    
-    if isinstance(file_path, str) and not file_path.startswith('http') and not os.path.exists(file_path):
-        return jsonify({'error': 'File not found'}), 404
-    
+        caption = f"Signature of {staff.full_name}\nMDA: {staff.mda or 'N/A'}\nDepartment: {staff.department or 'N/A'}"
     try:
         kit.sendwhats_image(phone_number, file_path, caption, wait_time=15, close_time=3)
         return jsonify({'success': True, 'message': 'WhatsApp sharing initiated! Check your WhatsApp.'})
@@ -916,34 +1090,28 @@ def share_whatsapp():
 @app.route('/admin/download-filtered-signatures')
 @login_required
 def download_filtered_signatures():
-    """Download all background-removed signatures based on current filters"""
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
-    
     search = request.args.get('search', '')
-    ministry_filter = request.args.get('ministry_filter', '')
+    mda_filter = request.args.get('mda_filter', '')
     
     query = Staff.query.filter(Staff.signature_bg_removed_path.isnot(None))
-    
     if search:
         query = query.filter(
             Staff.full_name.contains(search) | 
             Staff.email.contains(search) | 
             Staff.phone_number.contains(search)
         )
-    
-    if ministry_filter:
-        query = query.filter(Staff.ministry == ministry_filter)
+    if mda_filter:
+        query = query.filter(Staff.mda == mda_filter)
     
     staff_members = query.all()
-    
     if not staff_members:
         flash('No background-removed signatures found with current filters', 'warning')
-        return redirect(url_for('admin_staff', search=search, ministry_filter=ministry_filter))
+        return redirect(url_for('admin_staff', search=search, mda_filter=mda_filter))
     
     zip_buffer = io.BytesIO()
     count = 0
-    
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         for staff in staff_members:
             if staff.signature_bg_removed_path:
@@ -953,10 +1121,8 @@ def download_filtered_signatures():
                     with open(clean_path, 'rb') as f:
                         zf.writestr(filename, f.read())
                         count += 1
-    
     zip_buffer.seek(0)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    
     return send_file(zip_buffer, as_attachment=True, 
                     download_name=f'clean_signatures_{timestamp}.zip',
                     mimetype='application/zip')
@@ -964,45 +1130,42 @@ def download_filtered_signatures():
 @app.route('/admin/download-filtered-photos')
 @login_required
 def download_filtered_photos():
-    """Download all staff photos based on current filters"""
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
-    
     search = request.args.get('search', '')
-    ministry_filter = request.args.get('ministry_filter', '')
+    mda_filter = request.args.get('mda_filter', '')
     
     query = Staff.query.filter(Staff.image_path.isnot(None))
-    
     if search:
         query = query.filter(
             Staff.full_name.contains(search) | 
             Staff.email.contains(search) | 
             Staff.phone_number.contains(search)
         )
-    
-    if ministry_filter:
-        query = query.filter(Staff.ministry == ministry_filter)
+    if mda_filter:
+        query = query.filter(Staff.mda == mda_filter)
     
     staff_members = query.all()
-    
     if not staff_members:
         flash('No photos found with current filters', 'warning')
-        return redirect(url_for('admin_staff', search=search, ministry_filter=ministry_filter))
+        return redirect(url_for('admin_staff', search=search, mda_filter=mda_filter))
     
     zip_buffer = io.BytesIO()
     count = 0
-    
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         for staff in staff_members:
-            if staff.image_path and os.path.exists(staff.image_path):
-                filename = f"{clean_filename(staff.full_name)}_photo.png"
-                with open(staff.image_path, 'rb') as f:
-                    zf.writestr(filename, f.read())
-                    count += 1
-    
+            if staff.image_path:
+                if staff.image_path.startswith('http'):
+                    response = requests.get(staff.image_path)
+                    filename = f"{clean_filename(staff.full_name)}_photo.png"
+                    zf.writestr(filename, response.content)
+                elif os.path.exists(staff.image_path):
+                    filename = f"{clean_filename(staff.full_name)}_photo.png"
+                    with open(staff.image_path, 'rb') as f:
+                        zf.writestr(filename, f.read())
+                count += 1
     zip_buffer.seek(0)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    
     return send_file(zip_buffer, as_attachment=True, 
                     download_name=f'staff_photos_{timestamp}.zip',
                     mimetype='application/zip')
@@ -1010,41 +1173,39 @@ def download_filtered_photos():
 @app.route('/admin/download-filtered-all')
 @login_required
 def download_filtered_all():
-    """Download all staff data (photos and signatures) based on current filters"""
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
-    
     search = request.args.get('search', '')
-    ministry_filter = request.args.get('ministry_filter', '')
+    mda_filter = request.args.get('mda_filter', '')
     
     query = Staff.query
-    
     if search:
         query = query.filter(
             Staff.full_name.contains(search) | 
             Staff.email.contains(search) | 
             Staff.phone_number.contains(search)
         )
-    
-    if ministry_filter:
-        query = query.filter(Staff.ministry == ministry_filter)
+    if mda_filter:
+        query = query.filter(Staff.mda == mda_filter)
     
     staff_members = query.all()
-    
     if not staff_members:
         flash('No staff members found with current filters', 'warning')
-        return redirect(url_for('admin_staff', search=search, ministry_filter=ministry_filter))
+        return redirect(url_for('admin_staff', search=search, mda_filter=mda_filter))
     
     zip_buffer = io.BytesIO()
-    
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         for staff in staff_members:
             clean_name = clean_filename(staff.full_name)
             folder_name = f"{clean_name}_{staff.id}"
             
-            if staff.image_path and os.path.exists(staff.image_path):
-                with open(staff.image_path, 'rb') as f:
-                    zf.writestr(f"{folder_name}/photo.png", f.read())
+            if staff.image_path:
+                if staff.image_path.startswith('http'):
+                    response = requests.get(staff.image_path)
+                    zf.writestr(f"{folder_name}/photo.png", response.content)
+                elif os.path.exists(staff.image_path):
+                    with open(staff.image_path, 'rb') as f:
+                        zf.writestr(f"{folder_name}/photo.png", f.read())
             
             if staff.signature_bg_removed_path:
                 clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
@@ -1062,16 +1223,15 @@ Name: {staff.full_name}
 Email: {staff.email}
 Phone: {staff.phone_number}
 Username: {staff.username or 'Not set'}
-Ministry: {staff.ministry or 'N/A'}
+MDA: {staff.mda or 'N/A'}
 Department: {staff.department or 'N/A'}
 Designation: {staff.designation or 'N/A'}
-Has Clean Signature: {'Yes' if staff.signature_bg_removed_path else 'No'}
+Has Clean Signature: {'Yes' if staff.signature_bg_removed_path or staff.signature_bg_removed_url else 'No'}
 """
             zf.writestr(f"{folder_name}/staff_info.txt", info)
     
     zip_buffer.seek(0)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    
     return send_file(zip_buffer, as_attachment=True, 
                     download_name=f'all_staff_data_{timestamp}.zip',
                     mimetype='application/zip')
@@ -1083,11 +1243,9 @@ Has Clean Signature: {'Yes' if staff.signature_bg_removed_path else 'No'}
 def admin_dashboard():
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
-    
     total_staff = Staff.query.count()
     total_admins = Admin.query.count()
     recent_imports = ImportLog.query.order_by(ImportLog.import_date.desc()).limit(5).all()
-    
     return render_template('admin_dashboard.html', 
                          total_staff=total_staff, 
                          total_admins=total_admins,
@@ -1100,9 +1258,15 @@ def admin_staff():
         return redirect(url_for('staff_dashboard'))
     
     search = request.args.get('search', '')
-    ministry_filter = request.args.get('ministry_filter', '')
+    mda_filter = request.args.get('mda_filter', '')
     
     query = Staff.query
+    
+    # If not super admin, filter by MDA
+    if session.get('user_role') != 'super_admin':
+        current_admin = Admin.query.filter_by(id=current_user.id).first()
+        if current_admin and current_admin.mda:
+            query = query.filter(Staff.mda == current_admin.mda)
     
     if search:
         query = query.filter(
@@ -1111,38 +1275,41 @@ def admin_staff():
             Staff.phone_number.contains(search)
         )
     
-    if ministry_filter:
-        query = query.filter(Staff.ministry == ministry_filter)
+    if mda_filter:
+        query = query.filter(Staff.mda == mda_filter)
     
     staff_list = query.all()
     
-    all_ministries = Staff.query.with_entities(Staff.ministry).distinct().all()
-    ministries = sorted([m[0] for m in all_ministries if m[0] and m[0] != ''])
+    # Get unique MDAs from filtered staff
+    all_mdas = Staff.query.with_entities(Staff.mda).distinct().all()
+    mdas = sorted([m[0] for m in all_mdas if m[0] and m[0] != ''])
+    
+    # Get MDA options for filter
+    mda_options = MDAOption.query.order_by(MDAOption.name).all()
     
     return render_template('staff_list.html', 
                          staff=staff_list, 
                          search=search,
-                         ministry_filter=ministry_filter,
-                         ministries=ministries)
+                         mda_filter=mda_filter,
+                         mdas=mdas,
+                         mda_options=mda_options)
 
 @app.route('/admin/staff/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def edit_staff(id):
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
-    
     staff = Staff.query.get_or_404(id)
-    
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
-        ministry = request.form.get('ministry')
         department = request.form.get('department')
         designation = request.form.get('designation')
         new_password = request.form.get('password')
+        mda = request.form.get('mda')
+        ed_password = request.form.get('ed_password')  # Plain text ED password
         
         if username == '':
             username = None
-        
         if username is not None and username != staff.username:
             existing_staff = Staff.query.filter(Staff.username == username).first()
             if existing_staff and existing_staff.id != staff.id:
@@ -1150,15 +1317,24 @@ def edit_staff(id):
                 return render_template('edit_staff.html', staff=staff)
         
         staff.username = username
-        staff.ministry = ministry
         staff.department = department
         staff.designation = designation
         staff.updated_by = current_user.full_name
+        staff.mda = mda
         
         if new_password and new_password.strip():
             staff.set_password(new_password.strip())
         
-        # Handle photo upload if a new photo is provided
+        # Update ED password (stores both hashed and plain text)
+        if ed_password is not None:
+            if ed_password.strip():
+                staff.set_ed_password(ed_password.strip())
+                flash('ED password updated successfully!', 'success')
+            else:
+                # Clear the ED password if field is empty
+                staff.set_ed_password(None)
+                flash('ED password cleared!', 'info')
+        
         photo_file = request.files.get('photo')
         if photo_file and photo_file.filename:
             try:
@@ -1169,13 +1345,11 @@ def edit_staff(id):
                     overwrite=True
                 )
                 staff.image_path = upload_result['secure_url']
-                print(f"✅ Photo uploaded to Cloudinary for {staff.full_name}")
             except Exception as e:
                 print(f"Cloudinary photo error: {e}")
                 flash(f'Photo upload failed: {str(e)}', 'danger')
                 return render_template('edit_staff.html', staff=staff)
         
-        # Handle signature upload if a new signature is provided
         signature_file = request.files.get('signature')
         if signature_file and signature_file.filename:
             try:
@@ -1186,7 +1360,6 @@ def edit_staff(id):
                     overwrite=True
                 )
                 staff.signature_path = upload_result['secure_url']
-                print(f"✅ Signature uploaded to Cloudinary for {staff.full_name}")
             except Exception as e:
                 print(f"Cloudinary signature error: {e}")
                 flash(f'Signature upload failed: {str(e)}', 'danger')
@@ -1200,7 +1373,6 @@ def edit_staff(id):
             db.session.rollback()
             flash(f'Error updating staff: {str(e)}', 'danger')
             return render_template('edit_staff.html', staff=staff)
-    
     return render_template('edit_staff.html', staff=staff)
 @app.route('/admin/staff/delete/<int:id>')
 @login_required
@@ -1208,18 +1380,7 @@ def delete_staff(id):
     if session.get('user_type') != 'admin' or session.get('user_role') != 'super_admin':
         flash('Permission denied', 'danger')
         return redirect(url_for('admin_staff'))
-    
     staff = Staff.query.get_or_404(id)
-    
-    if staff.image_path and os.path.exists(staff.image_path):
-        os.remove(staff.image_path)
-    if staff.signature_path and os.path.exists(staff.signature_path):
-        os.remove(staff.signature_path)
-    if staff.signature_bg_removed_path:
-        clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
-        if os.path.exists(clean_path):
-            os.remove(clean_path)
-    
     db.session.delete(staff)
     db.session.commit()
     flash('Staff deleted successfully', 'success')
@@ -1230,13 +1391,10 @@ def delete_staff(id):
 def import_data():
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
-    
     if request.method == 'POST':
         file = request.files.get('file')
         sheet_url = request.form.get('sheet_url')
-        
         df = None
-        
         if file and file.filename:
             if file.filename.endswith('.csv'):
                 df = pd.read_csv(file)
@@ -1256,14 +1414,12 @@ def import_data():
             except Exception as e:
                 flash(f'Error reading Google Sheet: {str(e)}', 'danger')
                 return redirect(url_for('import_data'))
-        
         if df is not None and not df.empty:
             successful, failed, errors = process_imported_staff(df, current_user.full_name)
             flash(f'Import completed! {successful} imported, {failed} failed', 'success')
             return redirect(url_for('admin_staff'))
         else:
             flash('No data found in file/sheet', 'danger')
-    
     return render_template('import_data.html')
 
 @app.route('/admin/signature-remover', methods=['GET', 'POST'])
@@ -1271,32 +1427,24 @@ def import_data():
 def signature_remover():
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
-    
     if not REMBG_AVAILABLE:
         flash('Background removal is disabled in this environment.', 'warning')
         return render_template('signature_remover.html')
-    
     if request.method == 'POST':
         files = request.files.getlist('signatures')
         results = []
-        
         for file in files:
             if file:
                 temp_filename = f"temp_{file.filename}"
                 temp_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, temp_filename)
                 file.save(temp_path)
-                
                 clean_filename = f"clean_{file.filename}"
                 clean_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, clean_filename)
-                
                 success = remove_signature_background(temp_path, clean_path)
-                
                 if success and os.path.exists(clean_path):
                     results.append({'name': file.filename, 'path': clean_path})
-                
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
-        
         if results:
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -1304,10 +1452,8 @@ def signature_remover():
                     if os.path.exists(r['path']):
                         with open(r['path'], 'rb') as f:
                             zf.writestr(f"clean_{r['name']}", f.read())
-            
             zip_buffer.seek(0)
             return send_file(zip_buffer, as_attachment=True, download_name='cleaned_signatures.zip')
-    
     return render_template('signature_remover.html')
 
 @app.route('/admin/download-all-signatures')
@@ -1315,10 +1461,8 @@ def signature_remover():
 def download_all_signatures():
     if session.get('user_type') != 'admin':
         return redirect(url_for('staff_dashboard'))
-    
     zip_buffer = io.BytesIO()
     count = 0
-    
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         staff_members = Staff.query.all()
         for staff in staff_members:
@@ -1327,13 +1471,11 @@ def download_all_signatures():
                 sig_path = os.path.join(Config.CLEAN_SIGNATURES_FOLDER, staff.signature_bg_removed_path)
             elif staff.signature_path:
                 sig_path = staff.signature_path
-            
             if sig_path and os.path.exists(sig_path):
                 with open(sig_path, 'rb') as f:
                     filename = f"{clean_filename(staff.full_name)}_signature.png"
                     zf.writestr(filename, f.read())
                     count += 1
-    
     zip_buffer.seek(0)
     if count > 0:
         return send_file(zip_buffer, as_attachment=True, download_name=f'signatures_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip')
@@ -1347,32 +1489,34 @@ def manage_admins():
     if session.get('user_type') != 'admin' or session.get('user_role') != 'super_admin':
         flash('Permission denied', 'danger')
         return redirect(url_for('admin_dashboard'))
-    
     admins = Admin.query.all()
-    return render_template('manage_admins.html', admins=admins)
+    return render_template('manage_admins.html', admins=admins, mda_options=MDAOption.query.all())
 
 @app.route('/admin/admins/create', methods=['POST'])
 @login_required
 def create_admin():
     if session.get('user_role') != 'super_admin':
         return jsonify({'error': 'Permission denied'}), 403
-    
     username = request.form.get('username')
     email = request.form.get('email')
     full_name = request.form.get('full_name')
     password = request.form.get('password')
     role = request.form.get('role', 'admin')
+    mda = request.form.get('mda')
     
     if Admin.query.filter_by(username=username).first():
         flash('Username already exists', 'danger')
         return redirect(url_for('manage_admins'))
     
-    admin = Admin(username=username, email=email, full_name=full_name, role=role)
+    admin = Admin(username=username, email=email, full_name=full_name, role=role, mda=mda)
     admin.set_password(password)
     db.session.add(admin)
     db.session.commit()
     
-    flash('Admin created successfully', 'success')
+    flash('Admin created successfully!', 'success')
+    if mda:
+        flash(f'This admin will only see staff from MDA: {mda}', 'info')
+    
     return redirect(url_for('manage_admins'))
 
 @app.route('/admin/admins/reset-password/<int:id>', methods=['POST'])
@@ -1380,15 +1524,12 @@ def create_admin():
 def reset_admin_password(id):
     if session.get('user_role') != 'super_admin':
         return jsonify({'error': 'Permission denied'}), 403
-    
     admin = Admin.query.get_or_404(id)
     new_password = request.form.get('password')
-    
     if new_password:
         admin.set_password(new_password)
         db.session.commit()
         flash('Password reset successfully', 'success')
-    
     return redirect(url_for('manage_admins'))
 
 @app.route('/admin/admins/delete/<int:id>', methods=['POST'])
@@ -1396,12 +1537,10 @@ def reset_admin_password(id):
 def delete_admin(id):
     if session.get('user_role') != 'super_admin':
         return jsonify({'error': 'Permission denied'}), 403
-    
     admin = Admin.query.get_or_404(id)
     if admin.username == current_user.username:
         flash('Cannot delete your own account', 'danger')
         return redirect(url_for('manage_admins'))
-    
     db.session.delete(admin)
     db.session.commit()
     flash('Admin deleted successfully', 'success')
@@ -1414,38 +1553,17 @@ def delete_admin(id):
 def staff_dashboard():
     if session.get('user_type') != 'staff':
         return redirect(url_for('admin_dashboard'))
-    
     return render_template('staff_dashboard.html', staff=current_user)
 
 @app.route('/migrate-to-cloudinary')
 @login_required
 def migrate_to_cloudinary():
-    """Temporary route to migrate existing images to Cloudinary"""
     if session.get('user_role') != 'super_admin':
         return jsonify({'error': 'Unauthorized'}), 401
-    
-    from config import Config
-    import cloudinary.uploader
-    import os
-    
-    cloudinary.config(
-        cloud_name=Config.CLOUDINARY_CLOUD_NAME,
-        api_key=Config.CLOUDINARY_API_KEY,
-        api_secret=Config.CLOUDINARY_API_SECRET
-    )
-    
     staff_members = Staff.query.all()
     results = []
-    
     for staff in staff_members:
-        result = {
-            'name': staff.full_name, 
-            'id': staff.id,
-            'photo': False, 
-            'signature': False
-        }
-        
-        # Migrate photo
+        result = {'name': staff.full_name, 'id': staff.id, 'photo': False, 'signature': False}
         if staff.image_path and not staff.image_path.startswith('http'):
             if os.path.exists(staff.image_path):
                 try:
@@ -1457,15 +1575,12 @@ def migrate_to_cloudinary():
                     )
                     staff.image_path = upload['secure_url']
                     result['photo'] = True
-                    result['photo_url'] = upload['secure_url']
                 except Exception as e:
                     result['photo_error'] = str(e)
             else:
                 result['photo_error'] = f"File not found: {staff.image_path}"
         elif staff.image_path and staff.image_path.startswith('http'):
             result['photo'] = 'already_cloud'
-        
-        # Migrate signature
         if staff.signature_path and not staff.signature_path.startswith('http'):
             if os.path.exists(staff.signature_path):
                 try:
@@ -1477,22 +1592,15 @@ def migrate_to_cloudinary():
                     )
                     staff.signature_path = upload['secure_url']
                     result['signature'] = True
-                    result['signature_url'] = upload['secure_url']
                 except Exception as e:
                     result['signature_error'] = str(e)
             else:
                 result['signature_error'] = f"File not found: {staff.signature_path}"
         elif staff.signature_path and staff.signature_path.startswith('http'):
             result['signature'] = 'already_cloud'
-        
         results.append(result)
-    
     db.session.commit()
-    return jsonify({
-        'success': True, 
-        'message': f'Processed {len(staff_members)} staff members',
-        'results': results
-    })
+    return jsonify({'success': True, 'message': f'Processed {len(staff_members)} staff members', 'results': results})
 
 # ==================== RUN APP ====================
 

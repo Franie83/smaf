@@ -50,6 +50,15 @@
             border: 3px solid #fff;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+        /* License badge */
+        .license-badge {
+            background-color: #ff9800;
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 5px;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -90,6 +99,17 @@
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('manage_admins') }}">
                                     <i class="fas fa-user-shield"></i> Admins
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('manage_mda_options') }}">
+                                    <i class="fas fa-building"></i> MDAs
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('manage_license') }}">
+                                    <i class="fas fa-key"></i> License
+                                    <span class="license-badge">Admin</span>
                                 </a>
                             </li>
                             {% endif %}
@@ -136,7 +156,7 @@
             {% if messages %}
                 {% for category, message in messages %}
                     <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
+                        {{ message|safe }}
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
