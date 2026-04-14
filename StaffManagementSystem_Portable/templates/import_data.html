@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Import Data{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Import Staff Data</h2>
+
+<ul class="nav nav-tabs mb-4" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#csv" type="button">Upload CSV/Excel</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#google" type="button">Google Sheet</button>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="csv">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Upload CSV or Excel File</label>
+                        <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xls">
+                    </div>
+                    <div class="alert alert-info">
+                        <strong>Required columns:</strong> NAME, EMAIL, PHONE NUMBER<br>
+                        <strong>Optional:</strong> SIGNATURE (Google Drive link), IMAGE OR PICTURE (Google Drive link)
+                    </div>
+                    <button type="submit" class="btn btn-primary">Import</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-pane fade" id="google">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Google Sheet Published URL</label>
+                        <input type="text" name="sheet_url" class="form-control" 
+                               placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
+                        <div class="form-text">
+                            Publish your sheet: File → Share → Publish to web → Select CSV format
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Import from Google Sheet</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">Template Format</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th>NAME</th><th>EMAIL</th><th>PHONE NUMBER</th>
+                        <th>SIGNATURE</th><th>IMAGE OR PICTURE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>John Doe</td>
+                        <td>john@example.com</td>
+                        <td>08012345678</td>
+                        <td>https://drive.google.com/open?id=FILE_ID</td>
+                        <td>https://drive.google.com/open?id=FILE_ID</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <a href="{{ url_for('static', filename='templates/staff_import_template.csv') }}" class="btn btn-secondary">
+            Download Template CSV
+        </a>
+    </div>
+</div>
+{% endblock %}

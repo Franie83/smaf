@@ -1,0 +1,679 @@
+{% extends "base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block extra_css %}
+<style>
+    .camera-section {
+        border: 2px dashed #ccc;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .camera-preview {
+        max-width: 100%;
+        margin-top: 10px;
+        border-radius: 10px;
+    }
+    .capture-buttons {
+        margin-top: 15px;
+    }
+    .photo-preview {
+        max-width: 200px;
+        max-height: 200px;
+        margin: 10px auto;
+        display: block;
+        border-radius: 10px;
+    }
+    .signature-preview {
+        max-width: 300px;
+        max-height: 150px;
+        margin: 10px auto;
+        display: block;
+        border: 1px solid #ddd;
+    }
+    .canvas-draw {
+        border: 2px solid #333;
+        border-radius: 5px;
+        cursor: crosshair;
+        margin: 10px auto;
+        display: block;
+        background-color: white;
+    }
+    .btn-camera {
+        background-color: #4CAF50;
+        color: white;
+        margin: 5px;
+    }
+    .btn-clear {
+        background-color: #f44336;
+        color: white;
+        margin: 5px;
+    }
+    .camera-controls {
+        margin-top: 10px;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+    }
+    .camera-selector {
+        margin-bottom: 10px;
+    }
+    .required-field::after {
+        content: " *";
+        color: red;
+    }
+    .add-mda-btn {
+        cursor: pointer;
+        color: #007bff;
+    }
+    .add-mda-btn:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="fas fa-user-plus"></i> Staff Registration</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data" id="registrationForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required-field">Full Name</label>
+                            <input type="text" name="full_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required-field">Email</label>
+                            <input type="email" name="email" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required-field">Phone Number</label>
+                            <input type="text" name="phone" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Department</label>
+                            <input type="text" name="department" class="form-control">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Designation</label>
+                            <input type="text" name="designation" class="form-control">
+                        </div>
+                        
+                        <!-- MDA Field (Ministry/Department/Agency) -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required-field">MDA (Ministry/Department/Agency)</label>
+                            <div class="input-group">
+                                <select name="mda" class="form-control" id="mdaSelect" required>
+                                    <option value="">Select MDA</option>
+                                    {% for mda in mda_options %}
+                                    <option value="{{ mda.name }}">{{ mda.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline-secondary" onclick="showNewMDAInput()">
+                                    <i class="fas fa-plus"></i> New
+                                </button>
+                            </div>
+                            <div id="newMDAInputGroup" style="display: none; margin-top: 10px;">
+                                <div class="input-group">
+                                    <input type="text" id="newMDAInput" class="form-control" placeholder="Enter new MDA name">
+                                    <button type="button" class="btn btn-success" onclick="addNewMDA()">
+                                        <i class="fas fa-check"></i> Add
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="hideNewMDAInput()">
+                                        <i class="fas fa-times"></i> Cancel
+                                    </button>
+                                </div>
+                            </div>
+                            <small class="text-muted">Select your MDA or click "New" to add if not listed</small>
+                        </div>
+                        
+                        <!-- REMOVED: Ministry field -->
+                        <!-- REMOVED: ED Password field (hidden) -->
+                        
+                    </div>
+                    
+                    <hr>
+                    <h5 class="mb-3"><i class="fas fa-camera"></i> Profile Photo Capture</h5>
+                    
+                    <!-- Photo Capture Options -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="camera-section">
+                                <h6><i class="fas fa-camera"></i> Take Photo with Camera</h6>
+                                
+                                <!-- Camera Selection Dropdown -->
+                                <div class="camera-selector">
+                                    <label>Camera Mode:</label>
+                                    <select id="photoCameraSelect" class="form-select form-select-sm" onchange="switchPhotoCamera()">
+                                        <option value="environment">📷 Back Camera (Document)</option>
+                                        <option value="user">🤳 Front Camera (Selfie)</option>
+                                    </select>
+                                </div>
+                                
+                                <button type="button" class="btn btn-success btn-sm" onclick="startPhotoCamera()">
+                                    <i class="fas fa-camera"></i> Open Camera
+                                </button>
+                                <div id="photoCameraContainer" style="display: none;">
+                                    <video id="photoVideo" class="camera-preview" width="100%" autoplay playsinline></video>
+                                    <div class="capture-buttons">
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="capturePhoto()">
+                                            <i class="fas fa-camera"></i> Capture
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-sm" onclick="stopPhotoCamera()">
+                                            <i class="fas fa-stop"></i> Stop
+                                        </button>
+                                    </div>
+                                    <div class="camera-controls">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="switchPhotoCamera()">
+                                            <i class="fas fa-sync-alt"></i> Switch Camera
+                                        </button>
+                                    </div>
+                                </div>
+                                <canvas id="photoCanvas" style="display: none;"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="camera-section">
+                                <h6><i class="fas fa-upload"></i> Or Upload Photo</h6>
+                                <input type="file" name="photo" class="form-control" accept="image/*" id="photoUpload">
+                                <small class="text-muted">Supported formats: JPG, PNG, GIF (Max 5MB)</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Photo Preview -->
+                    <div id="photoPreviewSection" style="display: none;">
+                        <label class="form-label">Photo Preview:</label>
+                        <img id="photoPreview" class="photo-preview" src="">
+                        <button type="button" class="btn btn-warning btn-sm" onclick="clearPhoto()">
+                            <i class="fas fa-trash-alt"></i> Clear Photo
+                        </button>
+                    </div>
+                    <input type="hidden" name="photo_data" id="photoData">
+                    
+                    <hr>
+                    <h5 class="mb-3"><i class="fas fa-signature"></i> Signature Capture</h5>
+                    
+                    <!-- Signature Capture Options -->
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="camera-section">
+                                <h6><i class="fas fa-camera"></i> Capture Signature</h6>
+                                
+                                <!-- Camera Selection for Signature -->
+                                <div class="camera-selector">
+                                    <label>Camera Mode:</label>
+                                    <select id="signatureCameraSelect" class="form-select form-select-sm" onchange="switchSignatureCamera()">
+                                        <option value="environment">📷 Back Camera (Document)</option>
+                                        <option value="user">🤳 Front Camera (Selfie)</option>
+                                    </select>
+                                </div>
+                                
+                                <button type="button" class="btn btn-success btn-sm" onclick="startSignatureCamera()">
+                                    <i class="fas fa-camera"></i> Open Camera
+                                </button>
+                                <div id="signatureCameraContainer" style="display: none;">
+                                    <video id="signatureVideo" class="camera-preview" width="100%" autoplay playsinline></video>
+                                    <div class="capture-buttons">
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="captureSignature()">
+                                            <i class="fas fa-camera"></i> Capture
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-sm" onclick="stopSignatureCamera()">
+                                            <i class="fas fa-stop"></i> Stop
+                                        </button>
+                                    </div>
+                                    <div class="camera-controls">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="switchSignatureCamera()">
+                                            <i class="fas fa-sync-alt"></i> Switch Camera
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="camera-section">
+                                <h6><i class="fas fa-draw-polygon"></i> Draw Signature</h6>
+                                <button type="button" class="btn btn-info btn-sm" onclick="openDrawCanvas()">
+                                    <i class="fas fa-pencil-alt"></i> Draw Signature
+                                </button>
+                                <div id="drawCanvasContainer" style="display: none;">
+                                    <canvas id="signatureCanvas" class="canvas-draw" width="400" height="200"></canvas>
+                                    <div class="capture-buttons">
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="saveDrawing()">
+                                            <i class="fas fa-save"></i> Save
+                                        </button>
+                                        <button type="button" class="btn btn-warning btn-sm" onclick="clearDrawing()">
+                                            <i class="fas fa-eraser"></i> Clear
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-sm" onclick="closeDrawCanvas()">
+                                            <i class="fas fa-times"></i> Close
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="camera-section">
+                                <h6><i class="fas fa-upload"></i> Or Upload Signature</h6>
+                                <input type="file" name="signature" class="form-control" accept="image/*" id="signatureUpload">
+                                <small class="text-muted">Supported formats: JPG, PNG (Max 2MB)</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Signature Preview -->
+                    <div id="signaturePreviewSection" style="display: none;">
+                        <label class="form-label">Signature Preview:</label>
+                        <img id="signaturePreview" class="signature-preview" src="">
+                        <button type="button" class="btn btn-warning btn-sm" onclick="clearSignature()">
+                            <i class="fas fa-trash-alt"></i> Clear Signature
+                        </button>
+                    </div>
+                    <input type="hidden" name="signature_data" id="signatureData">
+                    
+                    <hr>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Note:</strong> After registration, an administrator will activate your account and provide login credentials via email.
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg w-100">
+                        <i class="fas fa-paper-plane"></i> Submit Registration
+                    </button>
+                </form>
+                
+                <hr>
+                
+                <p class="text-center mb-0">
+                    <i class="fas fa-user-check"></i> Already registered? 
+                    <a href="{{ url_for('staff_login') }}" class="btn btn-link">Login here</a>
+                </p>
+                <p class="text-center text-muted small mt-2">
+                    <i class="fas fa-shield-alt"></i> Your information is secure and will only be used for official purposes
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // MDA Functions
+    function showNewMDAInput() {
+        document.getElementById('newMDAInputGroup').style.display = 'block';
+        document.getElementById('newMDAInput').focus();
+    }
+    
+    function hideNewMDAInput() {
+        document.getElementById('newMDAInputGroup').style.display = 'none';
+        document.getElementById('newMDAInput').value = '';
+    }
+    
+    function addNewMDA() {
+        const newMDA = document.getElementById('newMDAInput').value.trim();
+        if (newMDA) {
+            const select = document.getElementById('mdaSelect');
+            const option = document.createElement('option');
+            option.value = newMDA;
+            option.text = newMDA;
+            select.add(option);
+            select.value = newMDA;
+            hideNewMDAInput();
+        } else {
+            alert('Please enter an MDA name');
+        }
+    }
+    
+    // Photo Camera Variables
+    let photoStream = null;
+    let photoVideo = null;
+    let photoCanvas = null;
+    let currentPhotoFacingMode = 'environment';
+    
+    // Signature Camera Variables
+    let signatureStream = null;
+    let signatureVideo = null;
+    let currentSignatureFacingMode = 'environment';
+    
+    // Drawing Variables
+    let drawing = false;
+    let ctx = null;
+    let signatureCanvas = null;
+    
+    // Photo Camera Functions
+    async function startPhotoCamera() {
+        const container = document.getElementById('photoCameraContainer');
+        const video = document.getElementById('photoVideo');
+        
+        if (photoStream) {
+            stopPhotoCamera();
+        }
+        
+        const facingMode = document.getElementById('photoCameraSelect').value;
+        currentPhotoFacingMode = facingMode;
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { exact: facingMode } }
+            });
+            photoStream = stream;
+            video.srcObject = stream;
+            await video.play();
+            container.style.display = 'block';
+        } catch (error) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode }
+                });
+                photoStream = stream;
+                video.srcObject = stream;
+                await video.play();
+                container.style.display = 'block';
+            } catch (fallbackError) {
+                alert("Could not access camera: " + fallbackError.message + "\nPlease ensure you have granted camera permissions.");
+            }
+        }
+    }
+    
+    async function switchPhotoCamera() {
+        const select = document.getElementById('photoCameraSelect');
+        const newFacingMode = select.value;
+        if (newFacingMode !== currentPhotoFacingMode) {
+            await startPhotoCamera();
+        }
+    }
+    
+    function capturePhoto() {
+        const video = document.getElementById('photoVideo');
+        const canvas = document.getElementById('photoCanvas');
+        const context = canvas.getContext('2d');
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        document.getElementById('photoData').value = imageData;
+        
+        const preview = document.getElementById('photoPreview');
+        preview.src = imageData;
+        document.getElementById('photoPreviewSection').style.display = 'block';
+        
+        stopPhotoCamera();
+        alert("Photo captured successfully!");
+    }
+    
+    function stopPhotoCamera() {
+        if (photoStream) {
+            photoStream.getTracks().forEach(track => track.stop());
+            photoStream = null;
+        }
+        document.getElementById('photoCameraContainer').style.display = 'none';
+    }
+    
+    function clearPhoto() {
+        document.getElementById('photoData').value = '';
+        document.getElementById('photoPreviewSection').style.display = 'none';
+        document.getElementById('photoUpload').value = '';
+    }
+    
+    // Signature Camera Functions
+    async function startSignatureCamera() {
+        const container = document.getElementById('signatureCameraContainer');
+        const video = document.getElementById('signatureVideo');
+        
+        if (signatureStream) {
+            stopSignatureCamera();
+        }
+        
+        const facingMode = document.getElementById('signatureCameraSelect').value;
+        currentSignatureFacingMode = facingMode;
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { exact: facingMode } }
+            });
+            signatureStream = stream;
+            video.srcObject = stream;
+            await video.play();
+            container.style.display = 'block';
+        } catch (error) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode }
+                });
+                signatureStream = stream;
+                video.srcObject = stream;
+                await video.play();
+                container.style.display = 'block';
+            } catch (fallbackError) {
+                alert("Could not access camera: " + fallbackError.message);
+            }
+        }
+    }
+    
+    async function switchSignatureCamera() {
+        const select = document.getElementById('signatureCameraSelect');
+        const newFacingMode = select.value;
+        if (newFacingMode !== currentSignatureFacingMode) {
+            await startSignatureCamera();
+        }
+    }
+    
+    function captureSignature() {
+        const video = document.getElementById('signatureVideo');
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = canvas.toDataURL('image/png');
+        document.getElementById('signatureData').value = imageData;
+        
+        const preview = document.getElementById('signaturePreview');
+        preview.src = imageData;
+        document.getElementById('signaturePreviewSection').style.display = 'block';
+        
+        stopSignatureCamera();
+        alert("Signature captured successfully!");
+    }
+    
+    function stopSignatureCamera() {
+        if (signatureStream) {
+            signatureStream.getTracks().forEach(track => track.stop());
+            signatureStream = null;
+        }
+        document.getElementById('signatureCameraContainer').style.display = 'none';
+    }
+    
+    // Drawing Functions
+    function openDrawCanvas() {
+        const container = document.getElementById('drawCanvasContainer');
+        container.style.display = 'block';
+        
+        if (!signatureCanvas) {
+            signatureCanvas = document.getElementById('signatureCanvas');
+            ctx = signatureCanvas.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            
+            signatureCanvas.addEventListener('mousedown', startDrawing);
+            signatureCanvas.addEventListener('mousemove', draw);
+            signatureCanvas.addEventListener('mouseup', stopDrawing);
+            signatureCanvas.addEventListener('mouseleave', stopDrawing);
+            
+            signatureCanvas.addEventListener('touchstart', startDrawingTouch);
+            signatureCanvas.addEventListener('touchmove', drawTouch);
+            signatureCanvas.addEventListener('touchend', stopDrawing);
+        }
+    }
+    
+    function startDrawing(e) {
+        drawing = true;
+        ctx.beginPath();
+        ctx.moveTo(e.offsetX, e.offsetY);
+    }
+    
+    function draw(e) {
+        if (!drawing) return;
+        ctx.lineTo(e.offsetX, e.offsetY);
+        ctx.stroke();
+    }
+    
+    function stopDrawing() {
+        drawing = false;
+        ctx.beginPath();
+    }
+    
+    function startDrawingTouch(e) {
+        e.preventDefault();
+        const rect = signatureCanvas.getBoundingClientRect();
+        const x = e.touches[0].clientX - rect.left;
+        const y = e.touches[0].clientY - rect.top;
+        drawing = true;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+    }
+    
+    function drawTouch(e) {
+        e.preventDefault();
+        if (!drawing) return;
+        const rect = signatureCanvas.getBoundingClientRect();
+        const x = e.touches[0].clientX - rect.left;
+        const y = e.touches[0].clientY - rect.top;
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    }
+    
+    function saveDrawing() {
+        if (!ctx) return;
+        
+        const imageData = signatureCanvas.toDataURL('image/png');
+        document.getElementById('signatureData').value = imageData;
+        
+        const preview = document.getElementById('signaturePreview');
+        preview.src = imageData;
+        document.getElementById('signaturePreviewSection').style.display = 'block';
+        
+        closeDrawCanvas();
+        alert("Signature saved successfully!");
+    }
+    
+    function clearDrawing() {
+        if (!ctx) return;
+        
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+        ctx.fillStyle = 'black';
+    }
+    
+    function closeDrawCanvas() {
+        document.getElementById('drawCanvasContainer').style.display = 'none';
+    }
+    
+    function clearSignature() {
+        document.getElementById('signatureData').value = '';
+        document.getElementById('signaturePreviewSection').style.display = 'none';
+        document.getElementById('signatureUpload').value = '';
+    }
+    
+    // File upload handlers
+    document.getElementById('photoUpload').addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            if (file.size > 5 * 1024 * 1024) {
+                alert("File size too large! Maximum 5MB allowed.");
+                this.value = '';
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const preview = document.getElementById('photoPreview');
+                preview.src = event.target.result;
+                document.getElementById('photoPreviewSection').style.display = 'block';
+                document.getElementById('photoData').value = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+    
+    document.getElementById('signatureUpload').addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            if (file.size > 2 * 1024 * 1024) {
+                alert("File size too large! Maximum 2MB allowed.");
+                this.value = '';
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const preview = document.getElementById('signaturePreview');
+                preview.src = event.target.result;
+                document.getElementById('signaturePreviewSection').style.display = 'block';
+                document.getElementById('signatureData').value = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+    
+    // Form validation
+    document.getElementById('registrationForm').addEventListener('submit', function(e) {
+        const fullName = document.querySelector('[name="full_name"]').value;
+        const email = document.querySelector('[name="email"]').value;
+        const phone = document.querySelector('[name="phone"]').value;
+        const mda = document.querySelector('[name="mda"]').value;
+        
+        if (!fullName || !email || !phone || !mda) {
+            e.preventDefault();
+            alert("Please fill in all required fields (Full Name, Email, Phone Number, and MDA)!");
+            return false;
+        }
+        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            e.preventDefault();
+            alert("Please enter a valid email address!");
+            return false;
+        }
+        
+        if (phone.length < 10) {
+            e.preventDefault();
+            alert("Please enter a valid phone number!");
+            return false;
+        }
+    });
+    
+    function dataURLToBlob(dataURL) {
+        const parts = dataURL.split(';base64,');
+        const contentType = parts[0].split(':')[1];
+        const raw = window.atob(parts[1]);
+        const rawLength = raw.length;
+        const uInt8Array = new Uint8Array(rawLength);
+        for (let i = 0; i < rawLength; ++i) {
+            uInt8Array[i] = raw.charCodeAt(i);
+        }
+        return new Blob([uInt8Array], { type: contentType });
+    }
+    
+    // Clean up on page unload
+    window.addEventListener('beforeunload', function() {
+        if (photoStream) {
+            photoStream.getTracks().forEach(track => track.stop());
+        }
+        if (signatureStream) {
+            signatureStream.getTracks().forEach(track => track.stop());
+        }
+    });
+</script>
+{% endblock %}

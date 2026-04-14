@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10 text-center">
+        <h1 class="display-4 mb-4">Staff Management System</h1>
+        
+        <div class="row mt-5">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
+                        <h5 class="card-title">Staff Registration</h5>
+                        <p class="card-text">Register new staff members with photos and signatures</p>
+                        <a href="{{ url_for('register') }}" class="btn btn-primary">Register Now</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-users fa-3x text-success mb-3"></i>
+                        <h5 class="card-title">Staff Login</h5>
+                        <p class="card-text">Access your profile and information</p>
+                        <a href="{{ url_for('staff_login') }}" class="btn btn-success">Staff Login</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-user-shield fa-3x text-danger mb-3"></i>
+                        <h5 class="card-title">Admin Login</h5>
+                        <p class="card-text">Manage staff records and system settings</p>
+                        <a href="{{ url_for('admin_login') }}" class="btn btn-danger">Admin Login</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

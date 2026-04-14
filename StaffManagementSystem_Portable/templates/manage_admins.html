@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Admins{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Manage Administrators</h2>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Add New Admin</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('create_admin') }}">
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <input type="text" name="username" class="form-control" placeholder="Username" required>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <input type="email" name="email" class="form-control" placeholder="Email" required>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <input type="text" name="full_name" class="form-control" placeholder="Full Name" required>
+                </div>
+                <div class="col-md-2 mb-3">
+                    <select name="role" class="form-select">
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Super Admin</option>
+                    </select>
+                </div>
+                <div class="col-md-1 mb-3">
+                    <button type="submit" class="btn btn-primary w-100">Add</button>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <input type="password" name="password" class="form-control" placeholder="Password" required>
+                </div>
+                <!-- NEW: MDA Field for Admin -->
+                <div class="col-md-6 mb-3">
+                    <select name="mda" class="form-select">
+                        <option value="">All MDAs (No restriction)</option>
+                        {% for mda in mda_options %}
+                        <option value="{{ mda.name }}">{{ mda.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">If selected, this admin will only see staff from this MDA</small>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Existing Administrators</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Full Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>MDA Restriction</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for admin in admins %}
+                    <tr>
+                        <td>{{ admin.username }}</td>
+                        <td>{{ admin.full_name }}</td>
+                        <td>{{ admin.email }}</td>
+                        <td>
+                            {% if admin.role == 'super_admin' %}
+                                <span class="badge bg-danger">Super Admin</span>
+                            {% else %}
+                                <span class="badge bg-info">Admin</span>
+                            {% endif %}
+                         </td>
+                        <td>
+                            {% if admin.mda %}
+                                <span class="badge bg-secondary">{{ admin.mda }}</span>
+                            {% else %}
+                                <span class="text-muted">All MDAs</span>
+                            {% endif %}
+                         </td>
+                        <td>
+                            <button class="btn btn-sm btn-warning" onclick="resetPassword({{ admin.id }})">
+                                Reset Password
+                            </button>
+                            {% if admin.username != current_user.username %}
+                            <button class="btn btn-sm btn-danger" onclick="deleteAdmin({{ admin.id }})">
+                                Delete
+                            </button>
+                            {% endif %}
+                         </td>
+                     </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="passwordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reset Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="password" name="password" class="form-control" placeholder="New Password" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function resetPassword(id) {
+    const modal = document.getElementById('passwordModal');
+    const form = modal.querySelector('form');
+    form.action = `/admin/admins/reset-password/${id}`;
+    new bootstrap.Modal(modal).show();
+}
+
+function deleteAdmin(id) {
+    if(confirm('Delete this admin?')) {
+        fetch(`/admin/admins/delete/${id}`, {method: 'POST'})
+            .then(() => location.reload());
+    }
+}
+</script>
+{% endblock %}

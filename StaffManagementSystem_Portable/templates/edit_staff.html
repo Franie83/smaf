@@ -1,0 +1,876 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Staff{% endblock %}
+
+{% block extra_css %}
+<style>
+    .image-editor-section {
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        background-color: #f9f9f9;
+    }
+    .image-preview {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .signature-preview {
+        max-width: 100%;
+        max-height: 150px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 5px;
+    }
+    .edit-controls {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: white;
+        border-radius: 8px;
+    }
+    .btn-edit {
+        margin: 2px;
+    }
+    .slider-label {
+        font-size: 12px;
+        margin-top: 10px;
+        margin-bottom: 5px;
+    }
+    .current-image {
+        margin-bottom: 15px;
+        text-align: center;
+    }
+    .modal-dialog {
+        max-width: 800px;
+    }
+    .filter-badge {
+        cursor: pointer;
+        margin: 3px;
+    }
+    .filter-badge:hover {
+        opacity: 0.7;
+    }
+    .loading-spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 5px;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .btn-loading {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    .cloud-badge {
+        background-color: #17a2b8;
+        color: white;
+        font-size: 0.7rem;
+        margin-left: 5px;
+        padding: 2px 6px;
+        border-radius: 10px;
+    }
+    .badge-mda {
+        background-color: #28a745;
+        color: white;
+        font-size: 0.7rem;
+        margin-left: 5px;
+        padding: 2px 6px;
+        border-radius: 10px;
+    }
+    .info-box {
+        background-color: #e7f3ff;
+        border-left: 4px solid #2196F3;
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 5px;
+    }
+    .ed-password-box {
+        background-color: #e7f3ff;
+        border-left: 4px solid #2196F3;
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 5px;
+    }
+    .toast-notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 9999;
+        animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-edit"></i> Edit Staff: {{ staff.full_name }}
+                        {% if staff.mda %}
+                        <span class="badge-mda">
+                            <i class="fas fa-building"></i> {{ staff.mda }}
+                        </span>
+                        {% endif %}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="editStaffForm" enctype="multipart/form-data">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Username</label>
+                                    <input type="text" name="username" class="form-control" value="{{ staff.username or '' }}">
+                                    <small class="text-muted">Username must be unique. Leave empty for no username.</small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">New Password</label>
+                                    <input type="password" name="password" class="form-control" placeholder="Leave blank to keep current">
+                                    <small class="text-muted">Only enter if you want to change password</small>
+                                </div>
+                                
+                                <!-- ED PASSWORD FIELD - Text type without Generate/Clear buttons -->
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        <i class="fas fa-key"></i> Edocloud Password
+                                    </label>
+                                    <input type="text" name="ed_password" class="form-control" value="{{ staff.ed_password_raw or '' }}" placeholder="Enter ED Password for other platforms">
+                                   
+                                    <small class="text-muted">Staff members can see and copy this password from their dashboard for use on other platforms.</small>
+                                </div>
+                                
+                                <!-- MDA Field -->
+                                <div class="mb-3">
+                                    <label class="form-label">MDA (Ministry/Department/Agency)</label>
+                                    <div class="input-group">
+                                        <input type="text" name="mda" class="form-control" value="{{ staff.mda or '' }}" id="mdaInput">
+                                        <button type="button" class="btn btn-outline-secondary" onclick="showMDAOptions()">
+                                            <i class="fas fa-list"></i> Select
+                                        </button>
+                                    </div>
+                                    <small class="text-muted">Enter or select the Ministry, Department, or Agency</small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Department</label>
+                                    <input type="text" name="department" class="form-control" value="{{ staff.department or '' }}">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Designation</label>
+                                    <input type="text" name="designation" class="form-control" value="{{ staff.designation or '' }}">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" value="{{ staff.email }}" disabled>
+                                    <small class="text-muted">Email cannot be changed</small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Phone Number</label>
+                                    <input type="text" class="form-control" value="{{ staff.phone_number }}" disabled>
+                                    <small class="text-muted">Phone number cannot be changed</small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="image-editor-section">
+                                    <h6><i class="fas fa-user-circle"></i> Profile Photo</h6>
+                                    <div class="current-image">
+                                        {% if staff.image_path %}
+                                            <img id="currentPhoto" src="{{ staff.image_path }}" 
+                                                 class="image-preview" style="max-height: 200px;">
+                                            {% if staff.image_path.startswith('http') %}
+                                                <span class="cloud-badge">☁️ Cloud</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <img id="currentPhoto" src="{{ url_for('static', filename='default-avatar.png') }}" 
+                                                 class="image-preview" style="max-height: 200px; display: none;">
+                                            <div id="noPhotoMsg" class="text-muted">No photo uploaded</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="edit-controls">
+                                        <button type="button" class="btn btn-primary btn-sm btn-edit" onclick="openImageEditor('photo')">
+                                            <i class="fas fa-edit"></i> Edit Photo
+                                        </button>
+                                        <button type="button" class="btn btn-warning btn-sm btn-edit" onclick="triggerFileUpload('photo')">
+                                            <i class="fas fa-upload"></i> Replace Photo
+                                        </button>
+                                        <input type="file" id="photoUpload" style="display: none;" accept="image/*" onchange="uploadNewPhoto(this)">
+                                    </div>
+                                </div>
+                                
+                                <div class="image-editor-section mt-3">
+                                    <h6><i class="fas fa-signature"></i> Signature</h6>
+                                    <div class="current-image">
+                                        {% if staff.signature_path %}
+                                            <img id="currentSignature" src="{{ staff.signature_path }}" 
+                                                 class="signature-preview">
+                                            {% if staff.signature_path.startswith('http') %}
+                                                <span class="cloud-badge">☁️ Cloud</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <img id="currentSignature" src="{{ url_for('static', filename='default-signature.png') }}" 
+                                                 class="signature-preview" style="display: none;">
+                                            <div id="noSigMsg" class="text-muted">No signature uploaded</div>
+                                        {% endif %}
+                                        
+                                        {% if staff.signature_bg_removed_url %}
+                                            <div class="mt-2">
+                                                <small class="text-success">✓ Clean version available</small>
+                                                <br>
+                                                <img src="{{ staff.signature_bg_removed_url }}" 
+                                                     class="signature-preview" style="max-height: 100px;">
+                                                <span class="cloud-badge">☁️ Cloud</span>
+                                            </div>
+                                        {% elif staff.signature_bg_removed_path %}
+                                            <div class="mt-2">
+                                                <small class="text-success">✓ Clean version available</small>
+                                                <br>
+                                                <img src="{{ url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path) }}" 
+                                                     class="signature-preview" style="max-height: 100px;">
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="edit-controls">
+                                        <button type="button" class="btn btn-primary btn-sm btn-edit" onclick="openImageEditor('signature')">
+                                            <i class="fas fa-edit"></i> Edit Signature
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-sm btn-edit" onclick="removeBackground()" id="removeBgBtn">
+                                            <i class="fas fa-magic"></i> Remove Background
+                                        </button>
+                                        <button type="button" class="btn btn-warning btn-sm btn-edit" onclick="triggerFileUpload('signature')">
+                                            <i class="fas fa-upload"></i> Replace Signature
+                                        </button>
+                                        <input type="file" id="signatureUpload" style="display: none;" accept="image/*" onchange="uploadNewSignature(this)">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Update Staff
+                            </button>
+                            <a href="{{ url_for('admin_staff') }}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MDA Selection Modal -->
+<div class="modal fade" id="mdaSelectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select MDA</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="mdaSearch" class="form-control mb-3" placeholder="Search MDA...">
+                <div id="mdaList" style="max-height: 300px; overflow-y: auto;">
+                    <!-- MDA options will be loaded here -->
+                </div>
+                <hr>
+                <div class="input-group mt-2">
+                    <input type="text" id="newMdaInput" class="form-control" placeholder="Or add new MDA">
+                    <button class="btn btn-success" onclick="addNewMDA()">Add New</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Image Editor Modal -->
+<div class="modal fade" id="imageEditorModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Image Editor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="text-center">
+                            <h6>Preview</h6>
+                            <canvas id="editorCanvas" width="400" height="400" style="border: 1px solid #ddd; max-width: 100%;"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Edit Controls</h6>
+                        
+                        <div class="mb-2">
+                            <label class="slider-label">Brightness: <span id="brightnessVal">1.0</span></label>
+                            <input type="range" id="brightness" min="0.5" max="2.0" step="0.1" value="1.0" class="form-range">
+                        </div>
+                        
+                        <div class="mb-2">
+                            <label class="slider-label">Contrast: <span id="contrastVal">1.0</span></label>
+                            <input type="range" id="contrast" min="0.5" max="2.0" step="0.1" value="1.0" class="form-range">
+                        </div>
+                        
+                        <div class="mb-2">
+                            <label class="slider-label">Sharpness: <span id="sharpnessVal">1.0</span></label>
+                            <input type="range" id="sharpness" min="0.5" max="3.0" step="0.1" value="1.0" class="form-range">
+                        </div>
+                        
+                        <div class="mb-2">
+                            <label class="slider-label">Rotate</label>
+                            <select id="rotate" class="form-select">
+                                <option value="0">0°</option>
+                                <option value="90">90°</option>
+                                <option value="180">180°</option>
+                                <option value="270">270°</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-2">
+                            <label class="slider-label">Filters</label>
+                            <div>
+                                <span class="badge bg-secondary filter-badge" onclick="applyFilter('none')">None</span>
+                                <span class="badge bg-primary filter-badge" onclick="applyFilter('blur')">Blur</span>
+                                <span class="badge bg-success filter-badge" onclick="applyFilter('sharpen')">Sharpen</span>
+                                <span class="badge bg-danger filter-badge" onclick="applyFilter('edge')">Edge Detect</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-2">
+                            <label class="slider-label">Add Text</label>
+                            <input type="text" id="textOverlay" class="form-control" placeholder="Enter text">
+                            <div class="row mt-2">
+                                <div class="col-6">
+                                    <input type="number" id="textX" class="form-control" placeholder="X position" value="50">
+                                </div>
+                                <div class="col-6">
+                                    <input type="number" id="textY" class="form-control" placeholder="Y position" value="50">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-success w-100 mt-2" onclick="applyEdits()">
+                            <i class="fas fa-check"></i> Apply Changes
+                        </button>
+                        <button class="btn btn-danger w-100 mt-2" onclick="resetEdits()">
+                            <i class="fas fa-undo"></i> Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // MDA Functions
+    function showMDAOptions() {
+        const modal = new bootstrap.Modal(document.getElementById('mdaSelectModal'));
+        
+        fetch('/get-mda-options')
+            .then(response => response.json())
+            .then(data => {
+                const mdaList = document.getElementById('mdaList');
+                mdaList.innerHTML = '';
+                
+                data.mda_options.forEach(mda => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn btn-outline-secondary w-100 mb-2';
+                    btn.textContent = mda;
+                    btn.onclick = () => {
+                        document.getElementById('mdaInput').value = mda;
+                        modal.hide();
+                    };
+                    mdaList.appendChild(btn);
+                });
+                
+                if (data.mda_options.length === 0) {
+                    mdaList.innerHTML = '<div class="text-muted text-center">No MDA options available. Add one below.</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading MDA options:', error);
+            });
+        
+        modal.show();
+        
+        document.getElementById('mdaSearch').oninput = function() {
+            const searchTerm = this.value.toLowerCase();
+            const buttons = document.querySelectorAll('#mdaList button');
+            buttons.forEach(btn => {
+                if (btn.textContent.toLowerCase().includes(searchTerm)) {
+                    btn.style.display = 'block';
+                } else {
+                    btn.style.display = 'none';
+                }
+            });
+        };
+    }
+    
+    function addNewMDA() {
+        const newMda = document.getElementById('newMdaInput').value.trim();
+        if (!newMda) {
+            alert('Please enter an MDA name');
+            return;
+        }
+        
+        fetch('/add-mda-option', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name: newMda })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('mdaInput').value = newMda;
+                document.getElementById('newMdaInput').value = '';
+                bootstrap.Modal.getInstance(document.getElementById('mdaSelectModal')).hide();
+                alert('MDA added successfully!');
+            } else {
+                alert('Error adding MDA: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error adding MDA');
+        });
+    }
+    
+    let currentImageType = null;
+    let originalImageData = null;
+    let currentImageData = null;
+    let editorCanvas = null;
+    let editorCtx = null;
+    
+    function triggerFileUpload(type) {
+        if (type === 'photo') {
+            document.getElementById('photoUpload').click();
+        } else {
+            document.getElementById('signatureUpload').click();
+        }
+    }
+    
+    function openImageEditor(type) {
+        currentImageType = type;
+        const modal = new bootstrap.Modal(document.getElementById('imageEditorModal'));
+        
+        let imgSrc = '';
+        if (type === 'photo') {
+            const img = document.getElementById('currentPhoto');
+            imgSrc = img.src;
+        } else {
+            const img = document.getElementById('currentSignature');
+            imgSrc = img.src;
+        }
+        
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.onload = function() {
+            editorCanvas = document.getElementById('editorCanvas');
+            editorCanvas.width = img.width;
+            editorCanvas.height = img.height;
+            editorCtx = editorCanvas.getContext('2d');
+            editorCtx.drawImage(img, 0, 0);
+            originalImageData = editorCanvas.toDataURL();
+            currentImageData = originalImageData;
+        };
+        img.src = imgSrc;
+        
+        modal.show();
+    }
+    
+    function applyFilter(filter) {
+        if (!currentImageData) return;
+        
+        const img = new Image();
+        img.onload = function() {
+            editorCanvas.width = img.width;
+            editorCanvas.height = img.height;
+            editorCtx.drawImage(img, 0, 0);
+            
+            let imageData = editorCtx.getImageData(0, 0, editorCanvas.width, editorCanvas.height);
+            
+            switch(filter) {
+                case 'blur':
+                    imageData = applyBlur(imageData);
+                    break;
+                case 'sharpen':
+                    imageData = applySharpen(imageData);
+                    break;
+                case 'edge':
+                    imageData = applyEdgeDetect(imageData);
+                    break;
+            }
+            
+            editorCtx.putImageData(imageData, 0, 0);
+            currentImageData = editorCanvas.toDataURL();
+        };
+        img.src = currentImageData;
+    }
+    
+    function applyBlur(imageData) {
+        const data = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+        const result = new ImageData(width, height);
+        
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                let r = 0, g = 0, b = 0;
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const idx = ((y + dy) * width + (x + dx)) * 4;
+                        r += data[idx];
+                        g += data[idx + 1];
+                        b += data[idx + 2];
+                    }
+                }
+                const idx = (y * width + x) * 4;
+                result.data[idx] = r / 9;
+                result.data[idx + 1] = g / 9;
+                result.data[idx + 2] = b / 9;
+                result.data[idx + 3] = data[idx + 3];
+            }
+        }
+        return result;
+    }
+    
+    function applySharpen(imageData) {
+        const data = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+        const result = new ImageData(width, height);
+        const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
+        
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                let r = 0, g = 0, b = 0;
+                let ki = 0;
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const idx = ((y + dy) * width + (x + dx)) * 4;
+                        r += data[idx] * kernel[ki];
+                        g += data[idx + 1] * kernel[ki];
+                        b += data[idx + 2] * kernel[ki];
+                        ki++;
+                    }
+                }
+                const idx = (y * width + x) * 4;
+                result.data[idx] = Math.min(255, Math.max(0, r));
+                result.data[idx + 1] = Math.min(255, Math.max(0, g));
+                result.data[idx + 2] = Math.min(255, Math.max(0, b));
+                result.data[idx + 3] = data[idx + 3];
+            }
+        }
+        return result;
+    }
+    
+    function applyEdgeDetect(imageData) {
+        const data = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+        const result = new ImageData(width, height);
+        
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                const idx = (y * width + x) * 4;
+                const gx = -data[idx - 4 - width * 4] + data[idx + 4 - width * 4] - 
+                           2 * data[idx - 4] + 2 * data[idx + 4] - 
+                           data[idx - 4 + width * 4] + data[idx + 4 + width * 4];
+                const gy = -data[idx - 4 - width * 4] - 2 * data[idx - width * 4] - 
+                           data[idx + 4 - width * 4] + data[idx - 4 + width * 4] + 
+                           2 * data[idx + width * 4] + data[idx + 4 + width * 4];
+                const mag = Math.sqrt(gx * gx + gy * gy);
+                const val = Math.min(255, mag);
+                result.data[idx] = val;
+                result.data[idx + 1] = val;
+                result.data[idx + 2] = val;
+                result.data[idx + 3] = 255;
+            }
+        }
+        return result;
+    }
+    
+    function applyEdits() {
+        const brightness = parseFloat(document.getElementById('brightness').value);
+        const contrast = parseFloat(document.getElementById('contrast').value);
+        const sharpness = parseFloat(document.getElementById('sharpness').value);
+        const rotate = parseInt(document.getElementById('rotate').value);
+        const text = document.getElementById('textOverlay').value;
+        
+        if (!currentImageData) return;
+        
+        const img = new Image();
+        img.onload = function() {
+            let canvas = document.createElement('canvas');
+            let ctx = canvas.getContext('2d');
+            
+            let width = img.width;
+            let height = img.height;
+            if (rotate === 90 || rotate === 270) {
+                canvas.width = height;
+                canvas.height = width;
+            } else {
+                canvas.width = width;
+                canvas.height = height;
+            }
+            
+            ctx.save();
+            ctx.translate(canvas.width/2, canvas.height/2);
+            ctx.rotate(rotate * Math.PI / 180);
+            ctx.drawImage(img, -width/2, -height/2);
+            ctx.restore();
+            
+            let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = Math.min(255, Math.max(0, (data[i] - 128) * contrast + 128 + (brightness - 1) * 128));
+                data[i+1] = Math.min(255, Math.max(0, (data[i+1] - 128) * contrast + 128 + (brightness - 1) * 128));
+                data[i+2] = Math.min(255, Math.max(0, (data[i+2] - 128) * contrast + 128 + (brightness - 1) * 128));
+            }
+            ctx.putImageData(imageData, 0, 0);
+            
+            if (text) {
+                const x = parseInt(document.getElementById('textX').value);
+                const y = parseInt(document.getElementById('textY').value);
+                ctx.font = "20px Arial";
+                ctx.fillStyle = "white";
+                ctx.shadowColor = "black";
+                ctx.shadowBlur = 4;
+                ctx.fillText(text, x, y);
+            }
+            
+            editorCanvas.width = canvas.width;
+            editorCanvas.height = canvas.height;
+            editorCtx.drawImage(canvas, 0, 0);
+            currentImageData = editorCanvas.toDataURL();
+            saveEditedImage(currentImageData);
+        };
+        img.src = currentImageData;
+    }
+    
+    function resetEdits() {
+        if (originalImageData) {
+            const img = new Image();
+            img.onload = function() {
+                editorCanvas.width = img.width;
+                editorCanvas.height = img.height;
+                editorCtx.drawImage(img, 0, 0);
+                currentImageData = originalImageData;
+                
+                document.getElementById('brightness').value = 1.0;
+                document.getElementById('contrast').value = 1.0;
+                document.getElementById('sharpness').value = 1.0;
+                document.getElementById('rotate').value = 0;
+                document.getElementById('textOverlay').value = '';
+                
+                updateSliderLabels();
+            };
+            img.src = originalImageData;
+        }
+    }
+    
+    function saveEditedImage(imageDataUrl) {
+        fetch('/save-edited-image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                staff_id: {{ staff.id }},
+                type: currentImageType,
+                image_data: imageDataUrl
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (currentImageType === 'photo') {
+                    document.getElementById('currentPhoto').src = imageDataUrl + '?' + new Date().getTime();
+                    document.getElementById('currentPhoto').style.display = 'block';
+                    const noPhotoMsg = document.getElementById('noPhotoMsg');
+                    if (noPhotoMsg) noPhotoMsg.style.display = 'none';
+                } else {
+                    document.getElementById('currentSignature').src = imageDataUrl + '?' + new Date().getTime();
+                    document.getElementById('currentSignature').style.display = 'block';
+                    const noSigMsg = document.getElementById('noSigMsg');
+                    if (noSigMsg) noSigMsg.style.display = 'none';
+                }
+                alert('Image saved successfully!');
+                bootstrap.Modal.getInstance(document.getElementById('imageEditorModal')).hide();
+                setTimeout(() => location.reload(), 500);
+            } else {
+                alert('Error saving image: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error saving image');
+        });
+    }
+    
+    function uploadNewPhoto(input) {
+        if (input.files && input.files[0]) {
+            const formData = new FormData();
+            formData.append('photo', input.files[0]);
+            formData.append('staff_id', {{ staff.id }});
+            
+            const button = event.target;
+            showLoading(button);
+            
+            fetch('/upload-staff-photo', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading(button);
+                if (data.success) {
+                    document.getElementById('currentPhoto').src = data.image_url + '?' + new Date().getTime();
+                    document.getElementById('currentPhoto').style.display = 'block';
+                    const noPhotoMsg = document.getElementById('noPhotoMsg');
+                    if (noPhotoMsg) noPhotoMsg.style.display = 'none';
+                    alert('Photo replaced successfully!');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    alert('Error uploading photo: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                hideLoading(button);
+                alert('Error uploading photo');
+            });
+        }
+    }
+    
+    function uploadNewSignature(input) {
+        if (input.files && input.files[0]) {
+            const formData = new FormData();
+            formData.append('signature', input.files[0]);
+            formData.append('staff_id', {{ staff.id }});
+            
+            const button = event.target;
+            showLoading(button);
+            
+            fetch('/upload-staff-signature', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading(button);
+                if (data.success) {
+                    document.getElementById('currentSignature').src = data.signature_url + '?' + new Date().getTime();
+                    document.getElementById('currentSignature').style.display = 'block';
+                    const noSigMsg = document.getElementById('noSigMsg');
+                    if (noSigMsg) noSigMsg.style.display = 'none';
+                    alert('Signature replaced successfully!');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    alert('Error uploading signature: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                hideLoading(button);
+                alert('Error uploading signature');
+            });
+        }
+    }
+    
+    function removeBackground() {
+        if (!confirm('Remove background from signature? This may take a few seconds.')) {
+            return;
+        }
+        
+        const button = document.getElementById('removeBgBtn');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<span class="loading-spinner"></span> Processing...';
+        button.disabled = true;
+        
+        fetch('/admin/staff/remove-bg/{{ staff.id }}', {
+            method: 'GET'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Background removed successfully!');
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Could not remove background'));
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            alert('Error removing background');
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+    }
+    
+    function showLoading(button) {
+        if (button && button.tagName === 'INPUT') {
+            button = button.parentElement.querySelector('button');
+        }
+        if (button) {
+            button.innerHTML = '<span class="loading-spinner"></span> Uploading...';
+            button.disabled = true;
+        }
+    }
+    
+    function hideLoading(button) {
+        if (button && button.tagName === 'INPUT') {
+            button = button.parentElement.querySelector('button');
+        }
+        if (button) {
+            button.innerHTML = '<i class="fas fa-upload"></i> Replace';
+            button.disabled = false;
+        }
+    }
+    
+    function updateSliderLabels() {
+        document.getElementById('brightnessVal').textContent = document.getElementById('brightness').value;
+        document.getElementById('contrastVal').textContent = document.getElementById('contrast').value;
+        document.getElementById('sharpnessVal').textContent = document.getElementById('sharpness').value;
+    }
+    
+    const brightnessSlider = document.getElementById('brightness');
+    const contrastSlider = document.getElementById('contrast');
+    const sharpnessSlider = document.getElementById('sharpness');
+    
+    if (brightnessSlider) brightnessSlider.addEventListener('input', updateSliderLabels);
+    if (contrastSlider) contrastSlider.addEventListener('input', updateSliderLabels);
+    if (sharpnessSlider) sharpnessSlider.addEventListener('input', updateSliderLabels);
+</script>
+{% endblock %}

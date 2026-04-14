@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Signature Remover{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Signature Background Remover</h2>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Upload Signature Images</label>
+                        <input type="file" name="signatures" class="form-control" multiple accept="image/*">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Remove Backgrounds</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title">Instructions</h5>
+                <ul>
+                    <li>Upload signature images</li>
+                    <li>Removes white backgrounds</li>
+                    <li>Download as ZIP</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">Bulk Operations</h5>
+    </div>
+    <div class="card-body">
+        <a href="{{ url_for('download_all_signatures') }}" class="btn btn-success">
+            <i class="fas fa-download"></i> Download All Signatures
+        </a>
+    </div>
+</div>
+{% endblock %}

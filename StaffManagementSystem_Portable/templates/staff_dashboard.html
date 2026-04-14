@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}Staff Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-card {
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .profile-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px 10px 0 0;
+        padding: 20px;
+        text-align: center;
+    }
+    .profile-avatar {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        border: 4px solid white;
+        object-fit: cover;
+        margin-top: -75px;
+        background: white;
+    }
+    .info-section {
+        padding: 20px;
+    }
+    .info-label {
+        font-weight: bold;
+        color: #555;
+        margin-bottom: 5px;
+    }
+    .info-value {
+        margin-bottom: 15px;
+        padding: 8px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    .signature-preview {
+        max-width: 300px;
+        max-height: 100px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+        margin-top: 10px;
+    }
+    .login-info {
+        background-color: #d1ecf1;
+        border-left: 4px solid #17a2b8;
+        padding: 15px;
+        margin-top: 20px;
+        border-radius: 5px;
+    }
+    .login-info ul {
+        margin-bottom: 0;
+        margin-top: 10px;
+    }
+    .login-info li {
+        margin-bottom: 5px;
+    }
+    .password-note {
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 10px;
+        margin-top: 20px;
+        border-radius: 5px;
+    }
+    .badge-cloud {
+        background-color: #17a2b8;
+        color: white;
+        font-size: 0.7rem;
+        margin-left: 5px;
+        padding: 2px 6px;
+        border-radius: 10px;
+    }
+    .badge-mda {
+        background-color: #28a745;
+        color: white;
+        font-size: 0.8rem;
+        padding: 3px 8px;
+        border-radius: 15px;
+        margin-left: 5px;
+    }
+    .ed-password-box {
+        background-color: #e7f3ff;
+        border-left: 4px solid #2196F3;
+        padding: 10px;
+        margin-top: 10px;
+        border-radius: 5px;
+    }
+    .btn-toggle-password {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+    .toast-notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 9999;
+        animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card profile-card">
+                <div class="profile-header">
+                    <h3><i class="fas fa-user-circle"></i> Staff Dashboard</h3>
+                    <p>Welcome to your personal dashboard</p>
+                </div>
+                
+                <div class="text-center">
+                    {% if staff.image_path %}
+                        {% if staff.image_path.startswith('http') %}
+                            <img src="{{ staff.image_path }}" class="profile-avatar" alt="Profile Photo">
+                        {% else %}
+                            <img src="{{ url_for('uploaded_file', folder='staff_images', filename=staff.image_path.split('/')[-1]) }}" 
+                                 class="profile-avatar" alt="Profile Photo">
+                        {% endif %}
+                    {% else %}
+                    <div class="profile-avatar bg-secondary d-flex align-items-center justify-content-center mx-auto">
+                        <i class="fas fa-user fa-4x text-white"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="info-section">
+                    <h4 class="text-center mb-4">
+                        {{ staff.full_name }}
+                        {% if staff.mda %}
+                        <span class="badge-mda">
+                            <i class="fas fa-building"></i> {{ staff.mda }}
+                        </span>
+                        {% endif %}
+                    </h4>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="info-label"><i class="fas fa-envelope"></i> Email</div>
+                            <div class="info-value">{{ staff.email }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label"><i class="fas fa-phone"></i> Phone Number</div>
+                            <div class="info-value">{{ staff.phone_number }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label"><i class="fas fa-user-tag"></i> Username</div>
+                            <div class="info-value">{{ staff.username or 'Not set' }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label"><i class="fas fa-briefcase"></i> Designation</div>
+                            <div class="info-value">{{ staff.designation or 'Not specified' }}</div>
+                        </div>
+                        <!-- MDA Field -->
+                        <div class="col-md-6">
+                            <div class="info-label"><i class="fas fa-building"></i> MDA (Ministry/Department/Agency)</div>
+                            <div class="info-value">
+                                {% if staff.mda %}
+                                <strong>{{ staff.mda }}</strong>
+                                {% else %}
+                                <span class="text-muted">Not specified</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label"><i class="fas fa-users"></i> Department</div>
+                            <div class="info-value">{{ staff.department or 'Not specified' }}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- ED Password Field - ADDED -->
+                    <div class="mt-3">
+                        <div class="info-label"><i class="fas fa-key"></i> ED Password</div>
+                        <div class="info-value">
+                            {% if staff.ed_password_raw %}
+                                <div class="input-group">
+                                    <input type="password" id="edPasswordField" class="form-control" value="{{ staff.ed_password_raw }}" readonly style="background-color: #f8f9fa;">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleEDPassword()">
+                                        <i class="fas fa-eye" id="edPasswordIcon"></i>
+                                    </button>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyEDPassword()">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                </div>
+                                <div class="ed-password-box mt-2">
+                                    <i class="fas fa-info-circle"></i> 
+                                    <strong>About ED Password:</strong> This password is used for other Edo State Government platforms and systems. You can copy it for use elsewhere.
+                                </div>
+                            {% else %}
+                                <div class="text-warning">
+                                    <i class="fas fa-exclamation-triangle"></i> ED Password not set - Please contact your administrator to set it up.
+                                </div>
+                                <div class="ed-password-box mt-2">
+                                    <i class="fas fa-info-circle"></i> 
+                                    <strong>Note:</strong> The ED Password is required for accessing other government platforms.
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Signature Section with Cloudinary Support -->
+                    <div class="mt-4">
+                        <div class="info-label"><i class="fas fa-signature"></i> Signature</div>
+                        <div class="info-value">
+                            {% if staff.signature_bg_removed_url %}
+                                <img src="{{ staff.signature_bg_removed_url }}" class="signature-preview" alt="Clean Signature">
+                                <span class="badge bg-success">✓ Clean Signature</span>
+                                <span class="badge-cloud">☁️ Cloud</span>
+                            {% elif staff.signature_bg_removed_path %}
+                                <img src="{{ url_for('uploaded_file', folder='staff_signatures_clean', filename=staff.signature_bg_removed_path) }}" 
+                                     class="signature-preview" alt="Clean Signature">
+                                <span class="badge bg-success">Clean Signature</span>
+                            {% elif staff.signature_path %}
+                                {% if staff.signature_path.startswith('http') %}
+                                    <img src="{{ staff.signature_path }}" class="signature-preview" alt="Signature">
+                                {% else %}
+                                    <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff.signature_path.split('/')[-1]) }}" 
+                                         class="signature-preview" alt="Signature">
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">No signature uploaded</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Login Information Section -->
+                    <div class="login-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Login Information:</strong><br>
+                        You can login using any of the following credentials:
+                        <ul>
+                            <li><strong>Username:</strong> {% if staff.username %}{{ staff.username }}{% else %}Not set{% endif %}</li>
+                            <li><strong>Email:</strong> {{ staff.email }}</li>
+                            <li><strong>Phone Number:</strong> {{ staff.phone_number }}</li>
+                            <li><strong>Full Name:</strong> {{ staff.full_name }}</li>
+                        </ul>
+                        <small>Your current password is the one set by the administrator. You can also use your phone number as password.</small>
+                    </div>
+                    
+                    <!-- Password Note -->
+                    <div class="password-note">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Security Note:</strong> Use your username as your password and reset it on your Edocloud account. For security purposes, please change your password after first login.
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="text-center text-muted">
+                        <small>Powered by Ministry of Communication and Digital Economy, Edo State</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Toggle ED Password visibility
+    function toggleEDPassword() {
+        const passwordField = document.getElementById('edPasswordField');
+        const icon = document.getElementById('edPasswordIcon');
+        
+        if (passwordField.type === 'password') {
+            passwordField.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            passwordField.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
+    
+    // Copy ED Password to clipboard
+    function copyEDPassword() {
+        const passwordField = document.getElementById('edPasswordField');
+        
+        if (!passwordField.value) {
+            showNotification('No ED Password set for this account', 'warning');
+            return;
+        }
+        
+        // Copy the password
+        navigator.clipboard.writeText(passwordField.value).then(() => {
+            showNotification('✓ ED Password copied to clipboard!', 'success');
+        }).catch(() => {
+            // Fallback method
+            passwordField.type = 'text';
+            passwordField.select();
+            document.execCommand('copy');
+            passwordField.type = 'password';
+            showNotification('✓ ED Password copied to clipboard!', 'success');
+        });
+    }
+    
+    // Show notification
+    function showNotification(message, type = 'success') {
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} toast-notification`;
+        notification.style.position = 'fixed';
+        notification.style.bottom = '20px';
+        notification.style.right = '20px';
+        notification.style.zIndex = '9999';
+        notification.style.minWidth = '250px';
+        notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        notification.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} me-2"></i>
+                <span>${message}</span>
+                <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            if (notification && notification.remove) {
+                notification.remove();
+            }
+        }, 3000);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">Login</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">User Type</label>
+                        <select name="user_type" class="form-select" required>
+                            <option value="staff">Staff Login (Email/Username/Phone)</option>
+                            <option value="admin">Admin Login</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Username/Email/Phone</label>
+                        <input type="text" name="username" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Login</button>
+                </form>
+                <hr>
+                <p class="text-center mb-0">
+                    Don't have an account? <a href="{{ url_for('register') }}">Register here</a>
+                </p>
+                <p class="text-center text-muted small mt-2">
+                    Default Admin: admin / admin123<br>
+                    Default Super Admin: superadmin / superadmin123
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

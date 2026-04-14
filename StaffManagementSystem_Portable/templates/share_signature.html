@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Share Signature: {{ staff.full_name }}</h2>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">Signature Preview</div>
+                <div class="card-body text-center">
+                    <img src="{{ url_for('uploaded_file', folder='staff_signatures_clean' if staff.signature_bg_removed_path else 'staff_signatures', 
+                         filename=signature_path.split('/')[-1]) }}" 
+                         class="img-fluid" style="max-height: 300px;" alt="Signature">
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">Share Options</div>
+                <div class="card-body">
+                    <!-- WhatsApp Sharing -->
+                    <form method="POST" action="{{ url_for('share_whatsapp', staff_id=staff.id) }}">
+                        <div class="mb-3">
+                            <label>Share via WhatsApp</label>
+                            <div class="input-group">
+                                <input type="tel" name="phone_number" class="form-control" 
+                                       placeholder="+1234567890" required>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fab fa-whatsapp"></i> Send via WhatsApp
+                                </button>
+                            </div>
+                            <small class="text-muted">Include country code (e.g., +1 for US)</small>
+                        </div>
+                    </form>
+                    
+                    <hr>
+                    
+                    <!-- Download -->
+                    <div class="mb-3">
+                        <label>Download Signature</label>
+                        <a href="{{ url_for('download_signature', staff_id=staff.id) }}" 
+                           class="btn btn-primary d-block">
+                            <i class="fas fa-download"></i> Download PNG
+                        </a>
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- Shareable Link -->
+                    <div class="mb-3">
+                        <label>Shareable Link</label>
+                        <div class="input-group">
+                            <input type="text" id="shareLink" class="form-control" value="{{ share_link }}" readonly>
+                            <button class="btn btn-secondary" onclick="copyLink()">Copy</button>
+                        </div>
+                    </div>
+                    
+                    <!-- QR Code -->
+                    <div class="text-center">
+                        <label>QR Code for Link</label>
+                        <div>
+                            <img src="{{ url_for('uploaded_file', folder='temp', filename=qr_path.split('/')[-1]) }}" 
+                                 class="img-fluid" style="max-width: 200px;" alt="QR Code">
+                        </div>
+                        <button class="btn btn-info mt-2" onclick="downloadQR()">Download QR Code</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyLink() {
+    const linkInput = document.getElementById('shareLink');
+    linkInput.select();
+    document.execCommand('copy');
+    alert('Link copied to clipboard!');
+}
+
+function downloadQR() {
+    const qrImg = document.querySelector('img[alt="QR Code"]');
+    const link = document.createElement('a');
+    link.download = 'qr_code.png';
+    link.href = qrImg.src;
+    link.click();
+}
+</script>
+{% endblock %}

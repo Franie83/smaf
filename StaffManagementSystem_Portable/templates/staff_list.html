@@ -1,0 +1,740 @@
+{% extends "base.html" %}
+
+{% block title %}Staff Members{% endblock %}
+
+{% block extra_css %}
+<style>
+    .staff-card {
+        transition: transform 0.2s;
+        margin-bottom: 20px;
+    }
+    .staff-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .staff-avatar {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #007bff;
+        margin: 0 auto;
+    }
+    .signature-preview {
+        max-width: 150px;
+        max-height: 60px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 5px;
+        margin: 10px auto;
+    }
+    .staff-name {
+        font-size: 1.1rem;
+        font-weight: bold;
+        margin-top: 10px;
+        text-align: center;
+    }
+    .staff-mda {
+        font-size: 0.9rem;
+        color: #666;
+        text-align: center;
+    }
+    .action-buttons {
+        margin-top: 15px;
+        text-align: center;
+    }
+    .action-buttons .btn {
+        margin: 2px;
+    }
+    .badge-clean {
+        background-color: #28a745;
+        color: white;
+        font-size: 0.7rem;
+    }
+    .badge-cloud {
+        background-color: #17a2b8;
+        color: white;
+        font-size: 0.7rem;
+        margin-left: 5px;
+    }
+    .badge-mda {
+        background-color: #6c757d;
+        color: white;
+        font-size: 0.7rem;
+        padding: 3px 8px;
+        border-radius: 15px;
+    }
+    .modal-body .staff-detail {
+        margin-bottom: 15px;
+    }
+    .detail-label {
+        font-weight: bold;
+        color: #007bff;
+    }
+    .modal-signature {
+        max-width: 100%;
+        max-height: 150px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+    }
+    .modal-photo {
+        max-width: 200px;
+        max-height: 200px;
+        border-radius: 10px;
+        margin: 0 auto;
+        display: block;
+    }
+    .share-section {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+    .grid-view {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        padding: 20px 0;
+    }
+    .filter-section {
+        margin-bottom: 20px;
+    }
+    .loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 5px;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .btn-remove-bg {
+        background-color: #ff9800;
+        color: white;
+    }
+    .btn-remove-bg:hover {
+        background-color: #e68900;
+        color: white;
+    }
+    .dropdown-item i {
+        margin-right: 8px;
+    }
+    .btn-loading {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    .share-modal-img {
+        max-width: 100%;
+        max-height: 200px;
+        margin: 10px 0;
+        border-radius: 8px;
+    }
+    .toast-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1100;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">
+                <i class="fas fa-users"></i> Staff Members
+                <div class="float-end">
+                    <div class="dropdown d-inline-block me-2">
+                        <button class="btn btn-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" onclick="downloadFiltered('signatures')">
+                                <i class="fas fa-signature"></i> Clean Signatures Only
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="downloadFiltered('photos')">
+                                <i class="fas fa-camera"></i> Photos Only
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" onclick="downloadFiltered('all')">
+                                <i class="fas fa-database"></i> All Data (Photos + Signatures)
+                            </a></li>
+                        </ul>
+                    </div>
+                    <button class="btn btn-warning btn-sm" onclick="bulkRemoveBackgrounds()" id="bulkRemoveBtn">
+                        <i class="fas fa-magic"></i> Bulk Remove BG
+                    </button>
+                </div>
+            </h4>
+        </div>
+        <div class="card-body">
+            <!-- Filters -->
+            <div class="filter-section">
+                <div class="row">
+                    <div class="col-md-5">
+                        <input type="text" id="searchInput" class="form-control" placeholder="Search by name, email, or phone..." 
+                               onkeyup="filterStaff()">
+                    </div>
+                    <div class="col-md-3">
+                        <!-- MDA Filter - Using mdas from distinct staff records -->
+                        <select id="mdaFilter" class="form-control" onchange="filterStaff()">
+                            <option value="">All MDAs</option>
+                            {% for mda in mdas %}
+                            <option value="{{ mda }}">{{ mda }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <div id="filterInfo" class="text-muted small" style="margin-top: 8px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Staff Grid View -->
+            <div id="staffGrid" class="grid-view">
+                {% for staff_member in staff %}
+                <div class="card staff-card" data-name="{{ staff_member.full_name|lower }}" 
+                     data-email="{{ staff_member.email|lower }}"
+                     data-phone="{{ staff_member.phone_number }}"
+                     data-mda="{{ staff_member.mda or '' }}" 
+                     data-id="{{ staff_member.id }}">
+                    <div class="card-body text-center">
+                        <!-- Photo -->
+                        <div>
+                            {% if staff_member.image_path %}
+                                {% if staff_member.image_path.startswith('http') %}
+                                    <img src="{{ staff_member.image_path }}" class="staff-avatar" alt="Staff Photo" 
+                                         onerror="this.onerror=null; this.src='{{ url_for('static', filename='default-avatar.png') }}';">
+                                {% else %}
+                                    <img src="{{ url_for('uploaded_file', folder='staff_images', filename=staff_member.image_path.split('/')[-1]) }}" 
+                                         class="staff-avatar" alt="Staff Photo"
+                                         onerror="this.onerror=null; this.src='{{ url_for('static', filename='default-avatar.png') }}';">
+                                {% endif %}
+                            {% else %}
+                                <div class="staff-avatar bg-secondary d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-user fa-3x text-white"></i>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Staff Name -->
+                        <div class="staff-name mt-2">
+                            {{ staff_member.full_name }}
+                            {% if staff_member.mda %}
+                            <span class="badge-mda">
+                                <i class="fas fa-building"></i> {{ staff_member.mda|truncate(20) }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Signature Preview -->
+                        <div class="mt-2">
+                            {% if staff_member.signature_bg_removed_url %}
+                                <img src="{{ staff_member.signature_bg_removed_url }}" 
+                                    class="signature-preview" alt="Clean Signature"
+                                    onerror="this.style.display='none'">
+                                <br><span class="badge badge-clean">✓ Clean Signature</span>
+                                <span class="badge badge-cloud">☁️ Cloud</span>
+                            {% elif staff_member.signature_path %}
+                                {% if staff_member.signature_path.startswith('http') %}
+                                    <img src="{{ staff_member.signature_path }}" class="signature-preview" alt="Signature"
+                                         onerror="this.style.display='none'">
+                                {% else %}
+                                    <img src="{{ url_for('uploaded_file', folder='staff_signatures', filename=staff_member.signature_path.split('/')[-1]) }}" 
+                                        class="signature-preview" alt="Signature"
+                                        onerror="this.style.display='none'">
+                                {% endif %}
+                                <br><span class="text-muted small">Has Signature</span>
+                            {% else %}
+                                <span class="text-muted small">No signature</span>
+                            {% endif %}
+                        </div>                        
+                        
+                        <!-- Action Buttons -->
+                        <div class="action-buttons">
+                            <button class="btn btn-info btn-sm" onclick="viewDetails({{ staff_member.id }})">
+                                <i class="fas fa-eye"></i> Preview
+                            </button>
+                            <button class="btn btn-success btn-sm" onclick="shareStaff({{ staff_member.id }})">
+                                <i class="fab fa-whatsapp"></i> Share
+                            </button>
+                            <button class="btn btn-primary btn-sm" onclick="editStaff({{ staff_member.id }})">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            {% if staff_member.signature_path and not staff_member.signature_bg_removed_path and not staff_member.signature_bg_removed_url %}
+                            <button class="btn btn-warning btn-sm btn-remove-bg" onclick="removeBackground({{ staff_member.id }})" id="removeBgBtn{{ staff_member.id }}">
+                                <i class="fas fa-magic"></i> Remove BG
+                            </button>
+                            {% endif %}
+                            {% if session.user_role == 'super_admin' %}
+                            <button class="btn btn-danger btn-sm" onclick="deleteStaff({{ staff_member.id }}, '{{ staff_member.full_name }}')">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="col-12 text-center">
+                    <p class="text-muted">No staff members found</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Staff Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewContent">
+                <!-- Dynamic content will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Share Modal -->
+<div class="modal fade" id="shareModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Share via WhatsApp</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="shareContent"></div>
+                <hr>
+                <div class="text-center">
+                    <label>Enter Phone Number (with country code)</label>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">+</span>
+                        <input type="text" id="whatsappNumber" class="form-control" placeholder="1234567890">
+                    </div>
+                    <button class="btn btn-success w-100" onclick="sendWhatsAppShare()" id="sendWhatsAppBtn">
+                        <i class="fab fa-whatsapp"></i> Send via WhatsApp
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentShareStaffId = null;
+    let currentShareType = null;
+    
+    // Show notification
+    function showNotification(message, type = 'info') {
+        const toastContainer = document.getElementById('toastContainer') || (() => {
+            const container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+            return container;
+        })();
+        
+        const toast = document.createElement('div');
+        toast.className = `toast align-items-center text-white bg-${type} border-0`;
+        toast.setAttribute('role', 'alert');
+        toast.setAttribute('aria-live', 'assertive');
+        toast.setAttribute('aria-atomic', 'true');
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        `;
+        toastContainer.appendChild(toast);
+        const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+        bsToast.show();
+        toast.addEventListener('hidden.bs.toast', () => toast.remove());
+    }
+    
+    // Filter staff members
+    function filterStaff() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const mdaFilter = document.getElementById('mdaFilter').value;
+        const cards = document.querySelectorAll('.staff-card');
+        let visibleCount = 0;
+        
+        cards.forEach(card => {
+            const name = card.getAttribute('data-name');
+            const email = card.getAttribute('data-email');
+            const phone = card.getAttribute('data-phone');
+            const mda = card.getAttribute('data-mda');
+            
+            const matchesSearch = !searchTerm || 
+                name.includes(searchTerm) || 
+                email.includes(searchTerm) || 
+                phone.includes(searchTerm);
+            const matchesMDA = !mdaFilter || mda === mdaFilter;
+            
+            if (matchesSearch && matchesMDA) {
+                card.style.display = '';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        
+        updateFilterInfo(visibleCount);
+    }
+    
+    // Update filter info display
+    function updateFilterInfo(visibleCount) {
+        const searchTerm = document.getElementById('searchInput').value;
+        const mdaFilter = document.getElementById('mdaFilter').value;
+        const filterInfo = document.getElementById('filterInfo');
+        
+        let filters = [];
+        if (searchTerm) filters.push(`Search: "${searchTerm}"`);
+        if (mdaFilter) filters.push(`MDA: ${mdaFilter}`);
+        
+        if (filters.length > 0) {
+            filterInfo.innerHTML = `<i class="fas fa-filter"></i> Filters: ${filters.join(' | ')} | <strong>${visibleCount}</strong> staff member(s) visible`;
+        } else {
+            filterInfo.innerHTML = `<i class="fas fa-info-circle"></i> No active filters | <strong>${visibleCount}</strong> staff member(s) total`;
+        }
+    }
+    
+    // Download filtered results
+    function downloadFiltered(type) {
+        const searchTerm = document.getElementById('searchInput').value;
+        const mdaFilter = document.getElementById('mdaFilter').value;
+        
+        let url = '';
+        if (type === 'signatures') {
+            url = '/admin/download-filtered-signatures';
+        } else if (type === 'photos') {
+            url = '/admin/download-filtered-photos';
+        } else {
+            url = '/admin/download-filtered-all';
+        }
+        
+        const params = new URLSearchParams();
+        if (searchTerm) params.append('search', searchTerm);
+        if (mdaFilter) params.append('mda_filter', mdaFilter);
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+        
+        showNotification(`Downloading ${type}...`, 'info');
+        window.location.href = url;
+    }
+    
+    // Edit staff
+    function editStaff(staffId) {
+        window.location.href = `/admin/staff/edit/${staffId}`;
+    }
+    
+    // Delete staff
+    function deleteStaff(staffId, staffName) {
+        if (confirm(`Are you sure you want to delete ${staffName}? This action cannot be undone.`)) {
+            window.location.href = `/admin/staff/delete/${staffId}`;
+        }
+    }
+    
+    // Remove background function
+    async function removeBackground(staffId) {
+        if (!confirm('Remove background from signature? This may take a few seconds.')) {
+            return;
+        }
+        
+        const button = document.getElementById(`removeBgBtn${staffId}`);
+        let originalText = '';
+        
+        if (button) {
+            originalText = button.innerHTML;
+            button.innerHTML = '<span class="loading"></span> Processing...';
+            button.disabled = true;
+        }
+        
+        try {
+            const response = await fetch(`/admin/staff/remove-bg/${staffId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                showNotification('✅ Background removed successfully!', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showNotification('❌ Error: ' + (data.error || 'Could not remove background'), 'danger');
+                if (button) {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }
+            }
+        } catch (error) {
+            showNotification('❌ Error removing background: ' + error.message, 'danger');
+            if (button) {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+    }
+    
+    // Bulk remove backgrounds
+    async function bulkRemoveBackgrounds() {
+        const searchTerm = document.getElementById('searchInput').value;
+        const mdaFilter = document.getElementById('mdaFilter').value;
+        
+        let filterMsg = '';
+        if (searchTerm || mdaFilter) {
+            filterMsg = ' matching current filters';
+        }
+        
+        if (!confirm(`Remove background from ALL signatures${filterMsg}? This may take several minutes.`)) {
+            return;
+        }
+        
+        const button = document.getElementById('bulkRemoveBtn');
+        let originalText = '';
+        
+        if (button) {
+            originalText = button.innerHTML;
+            button.innerHTML = '<span class="loading"></span> Processing...';
+            button.disabled = true;
+        }
+        
+        const params = new URLSearchParams();
+        if (searchTerm) params.append('search', searchTerm);
+        if (mdaFilter) params.append('mda_filter', mdaFilter);
+        
+        try {
+            const response = await fetch(`/admin/bulk-remove-bg?${params.toString()}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            const data = await response.json();
+            
+            if (data.processed > 0 || data.failed > 0) {
+                showNotification(`✅ Processed: ${data.processed}\n❌ Failed: ${data.failed}\nTotal: ${data.total}`, 'info');
+                if (data.processed > 0) {
+                    setTimeout(() => location.reload(), 1500);
+                }
+            } else {
+                showNotification(data.message || 'No signatures to process with current filters', 'warning');
+            }
+        } catch (error) {
+            showNotification('Error processing bulk removal: ' + error.message, 'danger');
+        } finally {
+            if (button) {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+    }
+    
+    // View staff details
+    async function viewDetails(staffId) {
+        try {
+            const response = await fetch(`/get-staff-details/${staffId}`);
+            const staff = await response.json();
+            
+            if (staff.success) {
+                const content = `
+                    <div class="row">
+                        <div class="col-md-5 text-center">
+                            <div class="staff-detail">
+                                <label class="detail-label">Profile Photo</label>
+                                ${staff.photo_url ? 
+                                    `<img src="${staff.photo_url}?${Date.now()}" class="modal-photo" alt="Staff Photo" onerror="this.src='{{ url_for('static', filename='default-avatar.png') }}'">` : 
+                                    '<div class="text-muted">No photo available</div>'
+                                }
+                            </div>
+                            <div class="staff-detail mt-3">
+                                <label class="detail-label">Signature</label>
+                                <div>
+                                    ${staff.signature_url ? 
+                                        `<img src="${staff.signature_url}?${Date.now()}" class="modal-signature" alt="Signature" onerror="this.style.display='none'">` : 
+                                        '<div class="text-muted">No signature available</div>'
+                                    }
+                                </div>
+                                ${staff.has_clean ? '<span class="badge bg-success mt-2">✓ Clean Signature Available</span>' : ''}
+                                ${staff.signature_url && !staff.has_clean ? '<button class="btn btn-warning btn-sm mt-2" onclick="removeBackgroundFromModal(' + staff.id + ')"><i class="fas fa-magic"></i> Remove Background</button>' : ''}
+                            </div>
+                        </div>
+                        <div class="col-md-7">
+                            <h4>${escapeHtml(staff.full_name)}</h4>
+                            <hr>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-envelope"></i> Email:</label>
+                                <p>${escapeHtml(staff.email)}</p>
+                            </div>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-phone"></i> Phone:</label>
+                                <p>${escapeHtml(staff.phone_number)}</p>
+                            </div>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-building"></i> MDA (Ministry/Department/Agency):</label>
+                                <p>${escapeHtml(staff.mda || 'Not specified')}</p>
+                            </div>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-users"></i> Department:</label>
+                                <p>${escapeHtml(staff.department || 'Not specified')}</p>
+                            </div>
+                            <div class="staff-detail">
+                                <label class="detail-label"><i class="fas fa-briefcase"></i> Designation:</label>
+                                <p>${escapeHtml(staff.designation || 'Not specified')}</p>
+                            </div>
+                            <div class="share-section">
+                                <h6>Quick Actions</h6>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary btn-sm" onclick="shareItem(${staff.id}, 'photo')">
+                                        <i class="fas fa-camera"></i> Share Photo
+                                    </button>
+                                    <button class="btn btn-warning btn-sm" onclick="shareItem(${staff.id}, 'signature')">
+                                        <i class="fas fa-signature"></i> Share Signature
+                                    </button>
+                                    <button class="btn btn-info btn-sm" onclick="editStaff(${staff.id})">
+                                        <i class="fas fa-edit"></i> Edit Staff
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('previewContent').innerHTML = content;
+                new bootstrap.Modal(document.getElementById('previewModal')).show();
+            }
+        } catch (error) {
+            console.error('Error loading staff details:', error);
+            showNotification('Error loading staff details', 'danger');
+        }
+    }
+    
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Remove background from modal
+    async function removeBackgroundFromModal(staffId) {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('previewModal'));
+        modal.hide();
+        await removeBackground(staffId);
+    }
+    
+    // Share staff
+    function shareStaff(staffId) {
+        currentShareStaffId = staffId;
+        currentShareType = 'signature';
+        document.getElementById('whatsappNumber').value = '';
+        loadShareContent(staffId, 'signature');
+    }
+    
+    // Load share content
+    async function loadShareContent(staffId, type) {
+        const response = await fetch(`/get-share-info/${staffId}/${type}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const content = `
+                <div class="text-center">
+                    <h6>${escapeHtml(data.name)}</h6>
+                    <img src="${data.url}?${Date.now()}" class="share-modal-img" onerror="this.style.display='none'">
+                    <div class="mt-3">
+                        <label>Shareable Link:</label>
+                        <div class="input-group">
+                            <input type="text" id="shareLink" class="form-control" value="${data.url}" readonly>
+                            <button class="btn btn-secondary" onclick="copyLink()">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('shareContent').innerHTML = content;
+            new bootstrap.Modal(document.getElementById('shareModal')).show();
+        } else {
+            showNotification(data.error || 'Error loading item', 'danger');
+        }
+    }
+    
+    // Share specific item
+    async function shareItem(staffId, type) {
+        currentShareStaffId = staffId;
+        currentShareType = type;
+        document.getElementById('whatsappNumber').value = '';
+        await loadShareContent(staffId, type);
+    }
+    
+    // Send WhatsApp share
+    async function sendWhatsAppShare() {
+        const phoneNumber = document.getElementById('whatsappNumber').value;
+        if (!phoneNumber) {
+            showNotification('Please enter a phone number', 'warning');
+            return;
+        }
+        
+        const type = currentShareType || 'signature';
+        const button = document.getElementById('sendWhatsAppBtn');
+        let originalText = '';
+        
+        if (button) {
+            originalText = button.innerHTML;
+            button.innerHTML = '<span class="loading"></span> Sending...';
+            button.disabled = true;
+        }
+        
+        try {
+            const response = await fetch('/share-whatsapp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    staff_id: currentShareStaffId,
+                    type: type,
+                    phone_number: phoneNumber
+                })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                showNotification(data.message || 'WhatsApp sharing initiated!', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('shareModal')).hide();
+                bootstrap.Modal.getInstance(document.getElementById('previewModal'))?.hide();
+            } else {
+                showNotification(data.error || 'Error sharing via WhatsApp', 'danger');
+            }
+        } catch (error) {
+            showNotification('Error sharing via WhatsApp: ' + error.message, 'danger');
+        } finally {
+            if (button) {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+    }
+    
+    function copyLink() {
+        const linkInput = document.getElementById('shareLink');
+        linkInput.select();
+        document.execCommand('copy');
+        showNotification('Link copied to clipboard!', 'success');
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        filterStaff();
+    });
+</script>
+{% endblock %}

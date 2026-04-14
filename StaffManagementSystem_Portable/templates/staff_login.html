@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Staff Login{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0"><i class="fas fa-user"></i> Staff Login</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Login Options:</strong><br>
+                        You can login using any of the following:
+                        <ul class="mb-0 mt-2">
+                            <li><strong>Username</strong> (provided by admin)</li>
+                            <li><strong>Email Address</strong></li>
+                            <li><strong>Phone Number</strong></li>
+                            <li><strong>Full Name</strong></li>
+                        </ul>
+                        <hr>
+                        <small>Your password is your phone number (unless changed by admin).</small>
+                    </div>
+                    
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username / Email / Phone / Full Name</label>
+                            <input type="text" class="form-control" id="username" name="username" required autofocus>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password" required>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </button>
+                    </form>
+                    
+                    <hr>
+                    
+                    <div class="text-center">
+                        <a href="{{ url_for('register') }}" class="btn btn-link">
+                            <i class="fas fa-user-plus"></i> Register New Account
+                        </a>
+                        <br>
+                        <a href="{{ url_for('admin_login') }}" class="btn btn-link">
+                            <i class="fas fa-user-shield"></i> Admin Login
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
